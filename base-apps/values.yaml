@@ -27,7 +27,7 @@ charts:
   argo-rollouts:
     enabled: true
     helm:
-      - repoURL: https://kube-green.github.io/helm-charts
+      - repoURL: https://argoproj.github.io/argo-helm
         targetRevision: 2.39.6
     namespace: argo-rollouts
 
