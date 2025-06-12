@@ -13,26 +13,30 @@ spec:
   sources:
     {{- range $repo := $app.helm }}
     {{- if $repo.localChart }}
-    path: app_charts/{{ $app.chartName | default $appName }}
-    repoURL: {{ $.Values.spec.source.repoURL }}
-    targetRevision: {{ $repo.targetRevision }}
+    - path: app_charts/{{ $app.chartName | default $appName }}
+      repoURL: {{ $.Values.spec.source.repoURL }}
+      targetRevision: {{ $repo.targetRevision }}
     {{- else}}
-    chart: {{ $app.chartName | default $appName }}
-    repoURL: {{ $repo.repoURL }}
-    targetRevision: {{ $repo.targetRevision }}
+    - chart: {{ $app.chartName | default $appName }}
+      repoURL: {{ $repo.repoURL }}
+      targetRevision: {{ $repo.targetRevision }}
     {{- end }}
       helm:
         valueFiles:
           {{- if not $repo.valuesFilePath }}
-          - ../app_charts/{{ $app.appName | default $appName }}/values.yaml
+          - $values/base-apps/app_charts/{{ $app.appName | default $appName }}/values.yaml
           {{- else }}
-          - ../app_charts/{{ $app.appName | default $appName }}/{{ $repo.valuesFilePath }}/values.yaml
+          - $values/base-apps/app_charts/{{ $app.appName | default $appName }}/{{ $repo.valuesFilePath }}/values.yaml
           {{- end }}
         {{- if $app.extraValues }}
         valuesObject:
           {{- $app.extraValues | toYaml | nindent 10 }}
         {{- end }}
       {{- end }}
+    - repoURL: {{ $.Values.spec.source.repoURL }}
+      targetRevision: {{ $.Values.spec.source.targetRevision }}
+      path: {{ $.Values.spec.source.path }}
+      ref: values
   destination:
     namespace: {{ $app.namespace | default $.Values.dest_namespace }}
     server: {{ $.Values.spec.destination.server }}
