@@ -1,0 +1,26 @@
+auth:
+  adminUser: admin
+  adminPassword: admin
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  hostname: keycloak.home.lab
+  annotations:
+    # kubernetes.io/ingress.class: traefik
+    cert-manager.io/cluster-issuer: local-cluster-issuer
+    cert-manager.io/propagation-timeout: "30s"
+    cert-manager.io/polling-interval: "5s"
+  tls: true
+  extraTls:
+    - hosts:
+        - keycloak.home.lab
+      secretName: keycloak-tls
+
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: keycloakpg
+    password: keycloakpass

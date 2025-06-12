@@ -36,3 +36,10 @@ charts:
     helm:
       - targetRevision: 1.8.5
         localChart: true
+
+  keycloak:
+    enabled: true
+    helm:
+      - repoURL: https://charts.bitnami.com/bitnami
+        targetRevision: 24.7.4
+    namespace: keycloak
