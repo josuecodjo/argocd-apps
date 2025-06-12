@@ -1,0 +1,39 @@
+---
+argocd_namespace: argocd
+dest_project: default
+dest_namespace: tools
+spec:
+  destination:
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://github.com/josuecodjo/argocd-apps.git
+    targetRevision: HEAD
+    path: base-apps
+
+charts:
+  external-secrets:
+    enabled: true
+    helm:
+      - repoURL: "https://charts.external-secrets.io"
+        targetRevision: 0.14.3
+    namespace: external-secrets
+
+  kube-green:
+    enabled: true
+    helm:
+      - repoURL: https://kube-green.github.io/helm-charts
+        targetRevision: 0.6.0
+    namespace: kube-green
+
+  argo-rollouts:
+    enabled: true
+    helm:
+      - repoURL: https://kube-green.github.io/helm-charts
+        targetRevision: 2.39.6
+    namespace: argo-rollouts
+
+  kubernetes-dashboard:
+    enabled: false
+    helm:
+      - targetRevision: 1.8.5
+        localChart: true

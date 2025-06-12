@@ -1,0 +1,68 @@
+{{- range $appName, $app := .Values.charts }}
+{{- if $app.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $appName }}
+  namespace: {{ $.Values.argocd_namespace }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+
+spec:
+  sources:
+    {{- range $repo := $app.helm }}
+    {{- if $repo.localChart }}
+    - path: app_charts/{{ $app.chartName | default $appName }}
+      repoURL: {{ $.Values.spec.source.repoURL }}
+      targetRevision: {{ $repo.targetRevision }}
+    {{- else}}
+    - chart: {{ $app.chartName | default $appName }}
+      repoURL: {{ $repo.repoURL }}
+      targetRevision: {{ $repo.targetRevision }}
+    {{- end }}
+      helm:
+        valueFiles:
+          {{- if not $repo.valuesFilePath }}
+          - $values/app_charts/{{ $app.appName | default $appName }}/values.yaml
+          {{- else }}
+          - $values/app_charts/{{ $app.appName | default $appName }}/{{ $repo.valuesFilePath }}/values.yaml
+          {{- end }}
+        {{- if $app.extraValues }}
+        valuesObject:
+          {{- $app.extraValues | toYaml | nindent 10 }}
+        {{- end }}
+      {{- end }}
+    - repoURL: {{ $.Values.spec.source.repoURL }}
+      targetRevision: {{ $.Values.spec.source.targetRevision }}
+      path: {{ $.Values.spec.source.path }}
+      ref: values
+  destination:
+    namespace: {{ $app.namespace | default $.Values.dest_namespace }}
+    server: {{ $.Values.spec.destination.server }}
+  project: {{ $app.project | default $.Values.dest_project }}
+  {{- if $app.autosync_enabled | default true }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - Validate=false
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+      - ApplyOutOfSyncOnly=true
+      {{- if $app.serverSideApply }}
+      - ServerSideApply=true
+      {{- end }}
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  {{- end }}
+{{- end }}
+{{- end }}

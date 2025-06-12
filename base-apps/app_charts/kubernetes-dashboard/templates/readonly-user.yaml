@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: readonly-user
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: readonly-user
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    kubernetes.io/service-account.name: "readonly-user"
+type: kubernetes.io/service-account-token 
