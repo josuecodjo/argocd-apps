@@ -47,6 +47,14 @@ charts:
   kyverno:
     enabled: true
     helm:
-      - repoURL: https://kyverno.github.io/kyverno/
+      - repoURL: https://kyverno.github.io/kyverno
         targetRevision: 3.4.4
     namespace: kyverno
+    serverSideApply: true
+
+  falcosecurity:
+    enabled: true
+    helm:
+      - repoURL: https://falcosecurity.github.io/charts
+        targetRevision: 6.0.2
+    namespace: falco
