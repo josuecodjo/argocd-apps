@@ -43,3 +43,10 @@ charts:
       - repoURL: https://charts.bitnami.com/bitnami
         targetRevision: 24.7.4
     namespace: keycloak
+
+  kyverno:
+    enabled: false
+    helm:
+      - repoURL: https://kyverno.github.io/kyverno/
+        targetRevision: 3.4.4
+    namespace: kyverno
