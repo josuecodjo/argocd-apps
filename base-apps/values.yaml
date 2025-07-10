@@ -52,7 +52,7 @@ charts:
     namespace: kyverno
     serverSideApply: true
 
-  falcosecurity:
+  falco:
     enabled: true
     helm:
       - repoURL: https://falcosecurity.github.io/charts
