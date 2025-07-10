@@ -10,6 +10,12 @@ spec:
     targetRevision: HEAD
 
 charts:
+  # ----------------------------------
+  # Category: Security & Policy
+  # ----------------------------------
+
+  # Manages secrets from external providers (e.g., AWS Secrets Manager, Vault)
+  # and syncs them into Kubernetes Secrets.
   external-secrets:
     enabled: true
     helm:
@@ -17,33 +23,8 @@ charts:
         targetRevision: 0.14.3
     namespace: external-secrets
 
-  kube-green:
-    enabled: true
-    helm:
-      - repoURL: https://kube-green.github.io/helm-charts
-        targetRevision: 0.6.0
-    namespace: kube-green
-
-  argo-rollouts:
-    enabled: true
-    helm:
-      - repoURL: https://argoproj.github.io/argo-helm
-        targetRevision: 2.39.6
-    namespace: argo-rollouts
-
-  kubernetes-dashboard:
-    enabled: false
-    helm:
-      - targetRevision: 1.8.5
-        localChart: true
-
-  keycloak:
-    enabled: false
-    helm:
-      - repoURL: https://charts.bitnami.com/bitnami
-        targetRevision: 24.7.4
-    namespace: keycloak
-
+  # A policy engine for Kubernetes to validate, mutate, and generate resource
+  # configurations, enforcing security and best practices.
   kyverno:
     enabled: true
     helm:
@@ -52,9 +33,58 @@ charts:
     namespace: kyverno
     serverSideApply: true
 
+  # A runtime security tool that detects and alerts on anomalous
+  # behavior or threats inside containers and on the host.
   falco:
     enabled: true
     helm:
       - repoURL: https://falcosecurity.github.io/charts
         targetRevision: 6.0.2
     namespace: falco
+
+  # An open-source Identity and Access Management (IAM) solution for
+  # features like Single Sign-On (SSO). (Currently disabled)
+  keycloak:
+    enabled: false
+    helm:
+      - repoURL: https://charts.bitnami.com/bitnami
+        targetRevision: 24.7.4
+    namespace: keycloak
+
+  # ----------------------------------
+  # Category: CI/CD & Deployment
+  # ----------------------------------
+
+  # Provides advanced deployment strategies like Canary and Blue-Green
+  # releases for safer, controlled application updates.
+  argo-rollouts:
+    enabled: true
+    helm:
+      - repoURL: https://argoproj.github.io/argo-helm
+        targetRevision: 2.39.6
+    namespace: argo-rollouts
+
+  # ----------------------------------
+  # Category: Cost & Resource Optimization
+  # ----------------------------------
+
+  # Reduces cloud costs by automatically shutting down resources in
+  # non-production environments during off-hours.
+  kube-green:
+    enabled: true
+    helm:
+      - repoURL: https://kube-green.github.io/helm-charts
+        targetRevision: 0.6.0
+    namespace: kube-green
+
+  # ----------------------------------
+  # Category: Observability & Management
+  # ----------------------------------
+
+  # The official general-purpose, web-based UI for Kubernetes clusters.
+  # (Currently disabled)
+  kubernetes-dashboard:
+    enabled: false
+    helm:
+      - targetRevision: 1.8.5
+        localChart: true
