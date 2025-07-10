@@ -45,7 +45,7 @@ charts:
     namespace: keycloak
 
   kyverno:
-    enabled: false
+    enabled: true
     helm:
       - repoURL: https://kyverno.github.io/kyverno/
         targetRevision: 3.4.4
