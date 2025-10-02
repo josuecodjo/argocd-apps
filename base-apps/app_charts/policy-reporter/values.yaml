@@ -29,8 +29,8 @@ ingress:
   # -- Ingress host list
   hosts:
     - host: kyverno.home.lab
-  #    paths: []
-  # -- Ingress tls list
+      paths: []
+
   tls:
     - secretName: kyverno-tls
       hosts:
