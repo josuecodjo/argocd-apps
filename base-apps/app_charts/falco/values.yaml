@@ -1,1 +1,4 @@
 ---
+falcosidekick:
+  # -- Enable falcosidekick deployment.
+  enabled: true
