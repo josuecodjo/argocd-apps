@@ -95,3 +95,10 @@ charts:
     helm:
       - targetRevision: 1.8.5
         localChart: true
+
+  kube-prometheus-stack:
+    enabled: true
+    helm:
+      - repoURL: https://prometheus-community.github.io/helm-charts
+        targetRevision: 77.12.0
+    namespace: kube-green

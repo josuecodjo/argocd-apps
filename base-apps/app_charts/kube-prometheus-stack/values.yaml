@@ -1,0 +1,32 @@
+---
+grafana:
+  # -- (bool) Enable Policy Reporter UI
+  enabled: true
+
+  adminUser: admin
+  adminPassword: admin
+
+  ingress:
+    # -- Create Ingress
+    # This ingress exposes the policy-reporter core app.
+    enabled: true
+    # -- Ingress className
+    className: "traefik"
+    # -- Labels for the Ingress
+    labels: {}
+    # -- Annotations for the Ingress
+    annotations:
+      # kubernetes.io/ingress.class: traefik
+      cert-manager.io/cluster-issuer: local-cluster-issuer
+      cert-manager.io/propagation-timeout: "30s"
+      cert-manager.io/polling-interval: "5s"
+    # -- Ingress host list
+    hosts:
+      - grafana.home.lab
+
+    path: /
+
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.home.lab
