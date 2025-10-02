@@ -101,4 +101,5 @@ charts:
     helm:
       - repoURL: https://prometheus-community.github.io/helm-charts
         targetRevision: 77.12.0
-    namespace: kube-green
+    namespace: monitoring
+    serverSideApply: true
