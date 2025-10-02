@@ -17,7 +17,7 @@ ingress:
   # This ingress exposes the policy-reporter core app.
   enabled: true
   # -- Ingress className
-  className: ""
+  className: "traefik"
   # -- Labels for the Ingress
   labels: {}
   # -- Annotations for the Ingress
@@ -29,7 +29,9 @@ ingress:
   # -- Ingress host list
   hosts:
     - host: kyverno.home.lab
-      paths: []
+      paths:
+        - path: /
+          pathType: Prefix
 
   tls:
     - secretName: kyverno-tls
