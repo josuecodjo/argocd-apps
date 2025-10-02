@@ -5,3 +5,7 @@ falcosidekick:
 
   webui:
     enabled: true
+
+metrics:
+  # -- enabled specifies whether the metrics should be enabled.
+  enabled: true
