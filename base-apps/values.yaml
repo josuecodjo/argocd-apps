@@ -33,6 +33,13 @@ charts:
     namespace: kyverno
     serverSideApply: true
 
+  policy-reporter:
+    enabled: true
+    helm:
+      - repoURL: https://kyverno.github.io/policy-reporter
+        targetRevision: 3.5.0
+    namespace: policy-reporter
+
   # A runtime security tool that detects and alerts on anomalous
   # behavior or threats inside containers and on the host.
   falco:
