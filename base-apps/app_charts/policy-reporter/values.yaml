@@ -11,3 +11,27 @@ plugin:
   kyverno:
     # -- (bool) Enable Kyverno Plugin
     enabled: true
+
+ingress:
+  # -- Create Ingress
+  # This ingress exposes the policy-reporter core app.
+  enabled: true
+  # -- Ingress className
+  className: ""
+  # -- Labels for the Ingress
+  labels: {}
+  # -- Annotations for the Ingress
+  annotations:
+    # kubernetes.io/ingress.class: traefik
+    cert-manager.io/cluster-issuer: local-cluster-issuer
+    cert-manager.io/propagation-timeout: "30s"
+    cert-manager.io/polling-interval: "5s"
+  # -- Ingress host list
+  hosts:
+    - host: kyverno.home.lab
+  #    paths: []
+  # -- Ingress tls list
+  tls:
+    - secretName: kyverno-tls
+      hosts:
+        - kyverno.home.lab
