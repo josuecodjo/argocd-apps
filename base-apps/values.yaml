@@ -111,6 +111,6 @@ charts:
   kro:
     enabled: true
     helm:
-      - repoURL: registry.k8s.io/kro/charts/kro
+      - repoURL: registry.k8s.io/kro/charts
         targetRevision: 0.7.0
     namespace: kro
