@@ -103,3 +103,14 @@ charts:
         targetRevision: 77.12.0
     namespace: monitoring
     serverSideApply: true
+
+  # ----------------------------------
+  # Category: CRDs and abstraction
+  # ----------------------------------
+
+  kro:
+    enabled: true
+    helm:
+      - repoURL: oci://registry.k8s.io/kro/charts/kro
+        targetRevision: 0.7.0
+    namespace: kro
