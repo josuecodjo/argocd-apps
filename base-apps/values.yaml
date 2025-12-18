@@ -114,3 +114,14 @@ charts:
       - repoURL: registry.k8s.io/kro/charts
         targetRevision: 0.7.0
     namespace: kro
+
+  # ----------------------------------
+  # Category: Application Promotion
+  # ----------------------------------
+
+  kargo:
+    enabled: true
+    helm:
+      - repoURL: ghcr.io/akuity/kargo-charts/kargo
+        targetRevision: 1.8.4
+    namespace: kargo
