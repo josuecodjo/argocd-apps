@@ -68,7 +68,7 @@ charts:
     enabled: true
     helm:
       - repoURL: https://argoproj.github.io/argo-helm
-        targetRevision: 2.39.6
+        targetRevision: 2.40.9
     namespace: argo-rollouts
 
   # ----------------------------------
@@ -78,7 +78,7 @@ charts:
   # Reduces cloud costs by automatically shutting down resources in
   # non-production environments during off-hours.
   kube-green:
-    enabled: true
+    enabled: false
     helm:
       - repoURL: https://kube-green.github.io/helm-charts
         targetRevision: 0.6.0
@@ -123,5 +123,5 @@ charts:
     enabled: true
     helm:
       - repoURL: ghcr.io/akuity/kargo-charts
-        targetRevision: 1.8.4
+        targetRevision: 1.8.9
     namespace: kargo

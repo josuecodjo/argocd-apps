@@ -1,0 +1,35 @@
+---
+dashboard:
+  # -- (bool) Enable Argo Rollouts UI / Dashboard
+  enabled: true
+
+  ingress:
+    # -- Create Ingress for the Dashboard
+    enabled: true
+    # -- Ingress Class Name
+    # Note: Depending on the chart version, you may need to use `className` or `ingressClassName`.
+    # `ingressClassName` is standard for modern Kubernetes Ingress (v1).
+    ingressClassName: "traefik"
+    # -- Labels for the Ingress
+    labels: {}
+    # -- Annotations for the Ingress
+    annotations:
+      cert-manager.io/cluster-issuer: local-cluster-issuer
+      cert-manager.io/propagation-timeout: "30s"
+      cert-manager.io/polling-interval: "5s"
+    # -- Ingress host list
+    hosts:
+      - host: rollouts.home.lab
+        paths:
+          - path: /
+            pathType: Prefix
+
+    tls:
+      - secretName: argo-rollouts-tls
+        hosts:
+          - rollouts.home.lab
+
+controller:
+  metrics:
+    # -- Enables Prometheus Metrics for the Argo Rollouts Controller
+    enabled: true
