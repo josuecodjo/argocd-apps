@@ -17,12 +17,14 @@ dashboard:
       cert-manager.io/cluster-issuer: local-cluster-issuer
       cert-manager.io/propagation-timeout: "30s"
       cert-manager.io/polling-interval: "5s"
+
     # -- Ingress host list
     hosts:
-      - host: rollouts.home.lab
-        paths:
-          - path: /
-            pathType: Prefix
+      - rollouts.home.lab
+
+    paths:
+      - /
+    pathType: Prefix
 
     tls:
       - secretName: argo-rollouts-tls
