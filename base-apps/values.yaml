@@ -1,6 +1,6 @@
 ---
 argocd_namespace: argocd
-dest_project: default
+dest_project: tools
 dest_namespace: tools
 spec:
   destination:
