@@ -29,7 +29,7 @@ charts:
     enabled: true
     helm:
       - repoURL: https://kyverno.github.io/kyverno
-        targetRevision: 3.4.4
+        targetRevision: 3.8.1
     namespace: kyverno
     serverSideApply: true
 
@@ -37,7 +37,7 @@ charts:
     enabled: true
     helm:
       - repoURL: https://kyverno.github.io/policy-reporter
-        targetRevision: 3.5.0
+        targetRevision: 3.7.4
     namespace: policy-reporter
 
   # A runtime security tool that detects and alerts on anomalous
