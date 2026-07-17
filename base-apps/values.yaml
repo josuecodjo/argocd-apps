@@ -17,7 +17,7 @@ charts:
   # Manages secrets from external providers (e.g., AWS Secrets Manager, Vault)
   # and syncs them into Kubernetes Secrets.
   external-secrets:
-    enabled: true
+    enabled: false
     helm:
       - repoURL: "https://charts.external-secrets.io"
         targetRevision: 0.14.3
