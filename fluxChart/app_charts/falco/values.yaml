@@ -1,0 +1,11 @@
+---
+falcosidekick:
+  # -- Enable falcosidekick deployment.
+  enabled: true
+
+  webui:
+    enabled: true
+
+metrics:
+  # -- enabled specifies whether the metrics should be enabled.
+  enabled: true

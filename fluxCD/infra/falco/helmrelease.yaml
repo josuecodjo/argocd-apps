@@ -1,0 +1,33 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: falco
+  namespace: flux-system
+spec:
+  interval: 10m
+  releaseName: falco
+  targetNamespace: falco
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  driftDetection:
+    mode: enabled
+  chart:
+    spec:
+      chart: falco
+      version: "6.0.2"
+      sourceRef:
+        kind: HelmRepository
+        name: falco
+        namespace: flux-system
+  values:
+    falcosidekick:
+      enabled: true
+      webui:
+        enabled: true
+    metrics:
+      enabled: true

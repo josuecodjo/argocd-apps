@@ -1,0 +1,66 @@
+{{- range $appName, $app := .Values.charts }}
+{{- if $app.enabled }}
+{{- range $repo := $app.helm }}
+
+{{/* 1. Generate a Flux HelmRepository for external/upstream charts */}}
+{{- if not $repo.localChart }}
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: {{ $appName }}
+  namespace: {{ $app.namespace | default $.Values.dest_namespace }}
+spec:
+  interval: 1h
+  url: {{ $repo.repoURL }}
+{{- end }}
+
+{{/* 2. Generate the Flux HelmRelease for the application */}}
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: {{ $appName }}
+  namespace: {{ $app.namespace | default $.Values.dest_namespace }}
+spec:
+  interval: 15m
+  chart:
+    spec:
+      {{- if $repo.localChart }}
+      # Local charts point back to the directory inside the root GitRepository
+      chart: ./app_charts/{{ $app.chartName | default $appName }}
+      sourceRef:
+        kind: GitRepository
+        name: flux-system # The name of your bootstrapped root GitRepository
+        namespace: flux-system
+      {{- else }}
+      # External charts point to the dynamically generated HelmRepository above
+      chart: {{ $app.chartName | default $appName }}
+      version: {{ $repo.targetRevision | quote }}
+      sourceRef:
+        kind: HelmRepository
+        name: {{ $appName }}
+        namespace: {{ $app.namespace | default $.Values.dest_namespace }}
+      {{- end }}
+      
+  install:
+    createNamespace: true
+    remediation:
+      retries: 5
+  upgrade:
+    remediation:
+      retries: 5
+
+  {{/* 3. Read and merge local values seamlessly using native Helm functions */}}
+  values:
+    {{- $vPath := printf "app_charts/%s/values.yaml" $appName }}
+    {{- if $repo.valuesFilePath }}
+      {{- $vPath = printf "app_charts/%s/%s/values.yaml" $appName $repo.valuesFilePath }}
+    {{- end }}
+    {{- $localValues := $.Files.Get $vPath | fromYaml }}
+    {{- $mergedValues := mustMergeOverwrite (dict) $localValues ($app.extraValues | default dict) }}
+    {{- $mergedValues | toYaml | nindent 4 }}
+
+{{- end }}
+{{- end }}
+{{- end }}

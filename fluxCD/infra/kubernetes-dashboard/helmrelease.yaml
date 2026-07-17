@@ -1,0 +1,34 @@
+# No HelmRepository needed here: this chart lives in the argocd-apps repo
+# itself (base-apps/app_charts/kubernetes-dashboard) and declares its real
+# dependency -- the upstream kubernetes-dashboard chart, aliased kube-dashboard
+# -- in its own Chart.yaml. Flux's source-controller resolves that dependency
+# from the repository URL in Chart.yaml when it builds the chart artifact,
+# the same way `helm dependency build` would.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kubernetes-dashboard
+  namespace: flux-system
+spec:
+  interval: 10m
+  releaseName: kubernetes-dashboard
+  targetNamespace: tools
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  chart:
+    spec:
+      chart: ./base-apps/app_charts/kubernetes-dashboard
+      sourceRef:
+        kind: GitRepository
+        name: argocd-apps
+        namespace: flux-system
+  values:
+    kube-dashboard:
+      app:
+        ingress:
+          enabled: false

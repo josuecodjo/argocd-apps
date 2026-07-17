@@ -1,0 +1,49 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kargo
+  namespace: flux-system
+spec:
+  interval: 10m
+  releaseName: kargo
+  targetNamespace: kargo
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  driftDetection:
+    mode: enabled
+  chartRef:
+    kind: OCIRepository
+    name: kargo
+    namespace: flux-system
+  # NOTE: passwordHash / tokenSigningKey below were already committed in
+  # plaintext in the original repo's app_charts/kargo/values.yaml. Consider
+  # moving them to a Secret and referencing it via `valuesFrom` instead of
+  # inlining here -- see the note after this file listing.
+  values:
+    api:
+      host: kargo.home.lab
+      adminAccount:
+        enabled: true
+        passwordHash: "$2y$10$6JOwwFWeY6gMvv4ARt6qD.Qq74hK08xzrsEH2aIrrX9WFn9fS1TQC"
+        tokenSigningKey: "I0LX5sM9dnXXCKVD5nfoKquxTIDJxV8YDpW9k5g"
+        tokenTTL: 24h
+      tls:
+        enabled: false
+        terminatedUpstream: true
+      ingress:
+        enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: local-cluster-issuer
+          cert-manager.io/propagation-timeout: "30s"
+          cert-manager.io/polling-interval: "5s"
+        ingressClassName: "traefik"
+        tls:
+          enabled: true
+          selfSignedCert: false
+          secretName: kargo-tls
+        pathType: ImplementationSpecific

@@ -1,0 +1,4 @@
+kube-dashboard:
+  app:
+    ingress:
+      enabled: false

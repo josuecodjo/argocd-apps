@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - external-secrets
+  - kyverno
+  - policy-reporter
+  - falco
+  - argo-rollouts
+  - kro
+  - kargo
+
+  # Present in the repo but not deployed -- uncomment to enable,
+  # mirroring `enabled: false` in the old base-apps/values.yaml
+  # - keycloak
+  # - kube-green
+  # - kubernetes-dashboard
+  # - kube-prometheus-stack
+  # - vault

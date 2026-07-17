@@ -1,0 +1,23 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kro
+  namespace: flux-system
+spec:
+  interval: 10m
+  releaseName: kro
+  targetNamespace: kro
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  driftDetection:
+    mode: enabled
+  chartRef:
+    kind: OCIRepository
+    name: kro
+    namespace: flux-system
+  values: {}

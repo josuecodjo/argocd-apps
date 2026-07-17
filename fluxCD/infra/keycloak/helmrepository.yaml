@@ -1,0 +1,12 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: keycloak
+  namespace: flux-system
+spec:
+  interval: 1h
+  # NOTE: Bitnami retired the classic charts.bitnami.com index for most
+  # charts during 2025-2026 in favor of a paid "Secure Images" tier / the
+  # bitnamilegacy archive. Verify this chart+version still resolves here
+  # before enabling -- you may need to repoint this at an OCI mirror.
+  url: https://charts.bitnami.com/bitnami
