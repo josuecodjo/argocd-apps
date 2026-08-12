@@ -1,0 +1,6 @@
+---
+resources:
+  - 00-require-label.yaml
+  - 01-disallow-latest-tag.yaml
+  - 03-require-resources.yaml
+  - 04-generate-namespace-default.yaml
