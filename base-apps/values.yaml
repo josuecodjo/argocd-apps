@@ -26,7 +26,7 @@ charts:
   # A policy engine for Kubernetes to validate, mutate, and generate resource
   # configurations, enforcing security and best practices.
   kyverno:
-    enabled: true
+    enabled: false
     helm:
       - repoURL: https://kyverno.github.io/kyverno
         targetRevision: 3.8.1
