@@ -3,8 +3,37 @@ falcosidekick:
   # -- Enable falcosidekick deployment.
   enabled: true
 
+  # The web UI is a browsing convenience only. Falco's actual detection
+  # (the DaemonSet) and alert forwarding (falcosidekick outputs) do not
+  # depend on it. Its Redis backend previously grew to 27.4 GB / 4.2M keys
+  # and exhausted the node, so it stays disabled by default.
   webui:
-    enabled: true
+    enabled: false
+
+    # -- TTL for keys, syntax X<unit> with <unit>: s, m, d, w (0 = no ttl).
+    # The chart default is 0, which is what let events accumulate forever.
+    ttl: "7d"
+
+    redis:
+      # -- No PVC: prevents an unbounded RDB from reloading into RAM on restart.
+      storageEnabled: false
+
+      # -- Hard ceiling enforced by Redis itself, with eviction once reached.
+      # Must be a LIST of literal redis.conf lines, not a map: the chart
+      # does `range` over this and a map would emit bare values, which
+      # Redis rejects at startup.
+      customConfig:
+        - "maxmemory 1gb"
+        - "maxmemory-policy allkeys-lru"
+
+      # -- Chart default is {}, which yields BestEffort QoS and an unbounded
+      # cgroup. A limit turns a runaway into a contained pod OOM instead of
+      # a node-wide memory exhaustion.
+      resources:
+        limits:
+          memory: "2Gi"
+        requests:
+          memory: "256Mi"
 
 metrics:
   # -- enabled specifies whether the metrics should be enabled.
