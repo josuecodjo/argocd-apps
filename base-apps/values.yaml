@@ -34,7 +34,7 @@ charts:
     serverSideApply: true
 
   policy-reporter:
-    enabled: true
+    enabled: false
     helm:
       - repoURL: https://kyverno.github.io/policy-reporter
         targetRevision: 3.7.4
@@ -43,7 +43,7 @@ charts:
   # A runtime security tool that detects and alerts on anomalous
   # behavior or threats inside containers and on the host.
   falco:
-    enabled: true
+    enabled: false
     helm:
       - repoURL: https://falcosecurity.github.io/charts
         targetRevision: 6.0.2
@@ -109,7 +109,7 @@ charts:
   # ----------------------------------
 
   kro:
-    enabled: true
+    enabled: false
     helm:
       - repoURL: registry.k8s.io/kro/charts
         targetRevision: 0.7.0
@@ -120,7 +120,7 @@ charts:
   # ----------------------------------
 
   kargo:
-    enabled: true
+    enabled: false
     helm:
       - repoURL: ghcr.io/akuity/kargo-charts
         targetRevision: 1.8.9
