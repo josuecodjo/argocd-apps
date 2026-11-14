@@ -68,7 +68,7 @@ charts:
     enabled: true
     helm:
       - repoURL: https://argoproj.github.io/argo-helm
-        targetRevision: 2.40.9
+        targetRevision: 2.43.11
     namespace: argo-rollouts
 
   # ----------------------------------
@@ -88,14 +88,6 @@ charts:
   # Category: Observability & Management
   # ----------------------------------
 
-  # The official general-purpose, web-based UI for Kubernetes clusters.
-  # (Currently disabled)
-  kubernetes-dashboard:
-    enabled: false
-    helm:
-      - targetRevision: 1.8.5
-        localChart: true
-
   kube-prometheus-stack:
     enabled: false
     helm:
@@ -109,10 +101,10 @@ charts:
   # ----------------------------------
 
   kro:
-    enabled: false
+    enabled: true
     helm:
       - repoURL: registry.k8s.io/kro/charts
-        targetRevision: 0.7.0
+        targetRevision: 0.10.0
     namespace: kro
 
   # ----------------------------------
@@ -120,8 +112,8 @@ charts:
   # ----------------------------------
 
   kargo:
-    enabled: false
+    enabled: true
     helm:
       - repoURL: ghcr.io/akuity/kargo-charts
-        targetRevision: 1.8.9
+        targetRevision: 1.12.5
     namespace: kargo
