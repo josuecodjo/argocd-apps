@@ -12,11 +12,7 @@
 
 charts:
   # Security & policy stack is on in every environment today.
-  external-secrets:
-    enabled: true
-  kyverno:
-    enabled: true
-  policy-reporter:
-    enabled: true
-  falco:
-    enabled: true
+  vault:
+    enabled: false
+  vault-secrets-operator:
+    enabled: false
