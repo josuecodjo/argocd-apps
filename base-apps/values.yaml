@@ -32,7 +32,17 @@
 #   chartName         (str)   chart + app_charts/ dir    [default: the key]
 #   serverSideApply   (bool)  adds ServerSideApply=true (needed for big CRDs)
 #   autosync_enabled  (bool)  set false to drop syncPolicy entirely
-#   extraValues       (map)   inline values merged over the app_charts values
+#   extraValues       (map)   inline values merged over app_charts, verbatim
+#   templatedValues   (map)   same, but rendered with `tpl` first - use this for
+#                             {{ .Values.global.dnsName }}
+#
+# OCI-HOSTED CHARTS (kro, Kargo): use the BARE host, with no `oci://` scheme.
+# Argo CD has two modes here. A bare host plus `chart` is "Helm chart in an OCI
+# registry" and resolves as <repoURL>/<chart>:<targetRevision>. Adding `oci://`
+# switches it to OCI-artifact mode, where repoURL is the COMPLETE reference and
+# `chart` is ignored - which yields 403/not-found errors like
+#   failed to resolve revision "1.12.5": ghcr.io/akuity/kargo-charts:1.12.5
+# because the chart segment never gets appended. Verified on Argo CD v3.6.1.
 # =============================================================================
 
 argocd_namespace: argocd
@@ -195,7 +205,7 @@ charts:
     enabled: true
     namespace: kro
     helm:
-      - repoURL: oci://registry.k8s.io/kro/charts
+      - repoURL: registry.k8s.io/kro/charts
         targetRevision: 0.10.0
 
   # ----------------------------------
@@ -206,7 +216,7 @@ charts:
     enabled: true
     namespace: kargo
     helm:
-      - repoURL: oci://ghcr.io/akuity/kargo-charts
+      - repoURL: ghcr.io/akuity/kargo-charts
         targetRevision: 1.12.5
     templatedValues:
       api:
