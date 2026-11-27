@@ -264,7 +264,7 @@ charts:
   # `vault operator init` + `unseal`. In an earlier wave that would stall every
   # later wave. See the runbook in myLab/README.md.
   vault:
-    enabled: false
+    enabled: true
     wave: 3
     namespace: vault
     helm:
@@ -288,7 +288,7 @@ charts:
   # lease on every refresh. external-secrets stays enabled for static,
   # provider-agnostic secrets - see the README for the boundary.
   vault-secrets-operator:
-    enabled: false
+    enabled: true
     wave: 0
     namespace: vault-secrets-operator
     helm:
