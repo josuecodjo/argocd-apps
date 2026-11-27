@@ -23,3 +23,65 @@ grafana:
     # -- Ingress host list and TLS come from `templatedValues` in
     # base-apps/values.yaml, so the domain follows global.dnsName.
     path: /
+
+# ---------------------------------------------------------------------------
+# k3s compatibility
+# ---------------------------------------------------------------------------
+# k3s runs the control plane as a single binary, so these four Services simply
+# do not exist in kube-system (verified on this cluster). The chart enables all
+# four by default, and the resulting ServiceMonitors sit permanently Down and
+# fire KubeSchedulerDown / KubeControllerManagerDown / KubeProxyDown /
+# etcdMembersDown forever - which makes the whole alerting surface useless.
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+
+# ---------------------------------------------------------------------------
+# Prometheus
+# ---------------------------------------------------------------------------
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    retentionSize: 15GiB
+
+    # The chart default is `storageSpec: {}`, which means emptyDir - every pod
+    # restart would silently discard all history. Give it a real PVC.
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+grafana:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

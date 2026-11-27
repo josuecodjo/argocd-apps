@@ -35,6 +35,9 @@
 #   extraValues       (map)   inline values merged over app_charts, verbatim
 #   templatedValues   (map)   same, but rendered with `tpl` first - use this for
 #                             {{ .Values.global.dnsName }}
+#   wave              (int)   argocd.argoproj.io/sync-wave on the Application.
+#                             Lower waves sync first and must go Healthy before
+#                             the next wave starts. See the wave map below.
 #
 # OCI-HOSTED CHARTS (kro, Kargo): use the BARE host, with no `oci://` scheme.
 # Argo CD has two modes here. A bare host plus `chart` is "Helm chart in an OCI
@@ -43,6 +46,22 @@
 # `chart` is ignored - which yields 403/not-found errors like
 #   failed to resolve revision "1.12.5": ghcr.io/akuity/kargo-charts:1.12.5
 # because the chart segment never gets appended. Verified on Argo CD v3.6.1.
+#
+# WAVE MAP
+#   0  CRD installers            external-secrets, kyverno, kro,
+#                                vault-secrets-operator
+#   1  need wave-0 CRDs          kube-prometheus-stack, policy-reporter, kargo,
+#                                argo-rollouts
+#   2  workloads and CRs         php-apache, ghost, kyverno-policy,
+#                                monitoring-extras
+#   3  vault                     LAST on purpose: the chart's readiness probe is
+#                                `vault status`, which fails while Vault is
+#                                sealed or uninitialised. A not-Ready pod never
+#                                goes Healthy, and Argo CD will not start the
+#                                next wave until the current one is - so Vault
+#                                in an early wave would stall the whole
+#                                bootstrap behind a human unseal step.
+#   4  vault-config              needs Vault initialised; autosync is off
 # =============================================================================
 
 argocd_namespace: argocd
@@ -72,6 +91,7 @@ charts:
   # and syncs them into Kubernetes Secrets.
   external-secrets:
     enabled: false
+    wave: 0
     namespace: external-secrets
     helm:
       - repoURL: https://charts.external-secrets.io
@@ -81,6 +101,7 @@ charts:
   # configurations, enforcing security and best practices.
   kyverno:
     enabled: false
+    wave: 0
     namespace: kyverno
     serverSideApply: true
     helm:
@@ -90,6 +111,7 @@ charts:
   # Dashboard and reporting for Kyverno PolicyReports.
   policy-reporter:
     enabled: false
+    wave: 1
     namespace: policy-reporter
     helm:
       - repoURL: https://kyverno.github.io/policy-reporter
@@ -111,6 +133,7 @@ charts:
   # behavior or threats inside containers and on the host.
   falco:
     enabled: false
+    wave: 1
     namespace: falco
     helm:
       - repoURL: https://falcosecurity.github.io/charts
@@ -120,6 +143,7 @@ charts:
   # features like Single Sign-On (SSO).
   keycloak:
     enabled: false
+    wave: 1
     namespace: keycloak
     helm:
       - repoURL: https://charts.bitnami.com/bitnami
@@ -140,6 +164,7 @@ charts:
   # releases for safer, controlled application updates.
   argo-rollouts:
     enabled: true
+    wave: 1
     namespace: argo-rollouts
     helm:
       - repoURL: https://argoproj.github.io/argo-helm
@@ -162,6 +187,7 @@ charts:
   # non-production environments during off-hours.
   kube-green:
     enabled: false
+    wave: 1
     namespace: kube-green
     helm:
       - repoURL: https://kube-green.github.io/helm-charts
@@ -176,12 +202,14 @@ charts:
   # tracks this repo's revision rather than an upstream chart version.
   kubernetes-dashboard:
     enabled: false
+    wave: 1
     namespace: kubernetes-dashboard
     helm:
       - localChart: true
 
   kube-prometheus-stack:
-    enabled: false
+    enabled: true
+    wave: 1
     namespace: monitoring
     serverSideApply: true
     helm:
@@ -203,6 +231,7 @@ charts:
 
   kro:
     enabled: true
+    wave: 0
     namespace: kro
     helm:
       - repoURL: registry.k8s.io/kro/charts
@@ -214,6 +243,7 @@ charts:
 
   kargo:
     enabled: true
+    wave: 1
     namespace: kargo
     helm:
       - repoURL: ghcr.io/akuity/kargo-charts
@@ -221,6 +251,49 @@ charts:
     templatedValues:
       api:
         host: 'kargo.{{ .Values.global.dnsName }}'
+
+  # ----------------------------------
+  # Category: Secrets management
+  # ----------------------------------
+
+  # HashiCorp Vault, standalone with file storage on a local-path PVC.
+  #
+  # Wave 3 (last) is deliberate: the chart's readiness probe is `vault status`,
+  # which exits non-zero while Vault is sealed or uninitialised, so the pod is
+  # never Ready and this Application never goes Healthy until a human runs
+  # `vault operator init` + `unseal`. In an earlier wave that would stall every
+  # later wave. See the runbook in myLab/README.md.
+  vault:
+    enabled: false
+    wave: 3
+    namespace: vault
+    helm:
+      - repoURL: https://helm.releases.hashicorp.com
+        targetRevision: 0.34.1
+    templatedValues:
+      server:
+        ingress:
+          hosts:
+            - host: 'vault.{{ .Values.global.dnsName }}'
+              paths: []
+          tls:
+            - secretName: vault-tls
+              hosts:
+                - 'vault.{{ .Values.global.dnsName }}'
+
+  # Vault Secrets Operator. Chosen over External Secrets for the Vault path
+  # because the target use case is DYNAMIC database credentials: VSO renews
+  # leases, revokes them on delete, and can roll a Deployment when creds
+  # rotate. ESO re-reads on an interval and does none of that, so it leaks a
+  # lease on every refresh. external-secrets stays enabled for static,
+  # provider-agnostic secrets - see the README for the boundary.
+  vault-secrets-operator:
+    enabled: false
+    wave: 0
+    namespace: vault-secrets-operator
+    helm:
+      - repoURL: https://helm.releases.hashicorp.com
+        targetRevision: 2.0.0
 
 # =============================================================================
 # apps - plain git-path Applications
@@ -237,6 +310,7 @@ apps:
   # Autoscaling demo: Deployment + Service + HPA.
   php-apache:
     enabled: true
+    wave: 2
     path: declarative/apps/php-apache
     namespace: default
     project: default
@@ -244,6 +318,7 @@ apps:
   # Blogging platform used as a plain-manifest example.
   ghost:
     enabled: true
+    wave: 2
     path: declarative/apps/ghost
     namespace: default
     project: default
@@ -253,6 +328,30 @@ apps:
   # above to be enabled first (its CRDs must exist).
   kyverno-policy:
     enabled: false
+    wave: 2
+  # VSO wiring: a ServiceAccount, the VaultAuth that authenticates as it, and a
+  # throwaway demo secret proving the chain works. Wave 4 and autosync off: it
+  # can only succeed after Vault is initialised and the Kubernetes auth role
+  # exists, so it is synced by hand once per cluster.
+  vault-config:
+    enabled: false
+    wave: 4
+    autosync_enabled: false
+    path: declarative/apps/vault-config
+    namespace: vault-secrets-operator
+    project: default
+
+  # ServiceMonitors for the Argo CD metrics Services. These live here rather
+  # than in the Argo CD Helm release because Ansible installs Argo CD before
+  # Argo CD installs kube-prometheus-stack - so the ServiceMonitor CRD does not
+  # exist yet at that point. Wave 2 puts them after kps (wave 1).
+  monitoring-extras:
+    enabled: true
+    wave: 2
+    path: declarative/apps/monitoring-extras
+    namespace: monitoring
+    project: default
+
     path: declarative/apps/kyverno-policy
     namespace: default
     project: default

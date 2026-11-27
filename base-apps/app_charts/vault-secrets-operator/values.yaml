@@ -1,0 +1,28 @@
+---
+# Vault Secrets Operator.
+#
+# The default VaultConnection is set here so every VaultAuth / VaultStaticSecret
+# / VaultDynamicSecret in the cluster can omit `vaultConnectionRef` and just
+# work. Plain http: traffic stays inside the cluster, and Vault's own listener
+# runs with tls_disable (see app_charts/vault/values.yaml).
+defaultVaultConnection:
+  enabled: true
+  address: http://vault.vault.svc.cluster.local:8200
+
+# defaultAuthMethod stays disabled deliberately. The VaultAuth lives in
+# declarative/apps/vault-config instead, so it is versioned next to the
+# ServiceAccount it authenticates as and the secrets that consume it, and so it
+# syncs in wave 4 - after Vault has been initialised and the Kubernetes auth
+# role exists. Setting it here would create it in wave 0, where it can only fail.
+defaultAuthMethod:
+  enabled: false
+
+controller:
+  manager:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi

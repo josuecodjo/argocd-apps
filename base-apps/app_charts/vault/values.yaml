@@ -1,0 +1,48 @@
+---
+# Vault: standalone, file storage on a local-path PVC.
+#
+# No custom HCL here on purpose. The chart's default server.standalone.config
+# is already exactly what we want:
+#     ui = true
+#     listener "tcp" { tls_disable = 1  address = "[::]:8200" ... }
+#     storage "file" { path = "/vault/data" }
+# Overriding it would mean maintaining the whole block to change one line.
+server:
+  standalone:
+    enabled: true
+
+  dataStorage:
+    enabled: true
+    size: 2Gi            # chart default is 10Gi; a lab KV store needs far less
+
+  # server.authDelegator.enabled defaults to true and is REQUIRED for the
+  # Kubernetes auth method: Vault calls TokenReview to validate the
+  # ServiceAccount tokens that VSO presents. Left at the default.
+
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    pathType: Prefix
+    annotations:
+      cert-manager.io/cluster-issuer: local-cluster-issuer
+      cert-manager.io/propagation-timeout: "30s"
+      cert-manager.io/polling-interval: "5s"
+    # hosts + tls come from `templatedValues` in base-apps/values.yaml, so the
+    # domain follows global.dnsName.
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+ui:
+  enabled: true
+
+# The Vault Agent Injector delivers secrets by mutating pods. VSO does the same
+# job through CRDs, which is the path this lab takes, so the injector is dead
+# weight plus a mutating admission webhook in the request path.
+injector:
+  enabled: false

@@ -18,9 +18,9 @@ myLab (ansible)
             values.charts (Helm charts)          values.apps (git paths)
                      │                                     │
    external-secrets, kyverno, policy-reporter,    php-apache, ghost,
-   falco, keycloak, argo-rollouts, kube-green,    kyverno-policy
-   kubernetes-dashboard, kube-prometheus-stack,
-   kro, kargo
+   falco, keycloak, argo-rollouts, kube-green,    kyverno-policy,
+   kubernetes-dashboard, kube-prometheus-stack,   monitoring-extras,
+   kro, kargo, vault, vault-secrets-operator      vault-config
 ```
 
 ---
@@ -33,10 +33,12 @@ myLab (ansible)
 4. [Reference — `charts:` keys](#4-reference--charts-keys)
 5. [Reference — `apps:` keys](#5-reference--apps-keys)
 6. [Environment overlays](#6-environment-overlays)
-7. [The DNS domain](#7-the-dns-domain)
-8. [Rendering locally](#8-rendering-locally)
-9. [Gotchas](#9-gotchas)
-10. [The Flux track](#10-the-flux-track)
+7. [Sync waves](#7-sync-waves)
+8. [Secrets: Vault, VSO and ESO](#8-secrets-vault-vso-and-eso)
+9. [The DNS domain](#9-the-dns-domain)
+10. [Rendering locally](#10-rendering-locally)
+11. [Gotchas](#11-gotchas)
+12. [The Flux track](#12-the-flux-track)
 
 ---
 
@@ -59,14 +61,16 @@ base-apps/                     ← the Argo CD chart. This is the entry point.
 declarative/apps/<name>/       ← plain manifests Argo CD applies with kustomize
 ├── ghost/                       (referenced from values.apps)
 ├── php-apache/
-└── kyverno-policy/
+├── kyverno-policy/
+├── monitoring-extras/           ServiceMonitors for Argo CD's metrics
+└── vault-config/                VaultAuth + the demo secret for VSO
 
 fluxCD/                        ← a parallel Flux CD implementation of the same
 fluxChart/                       stack, kept for comparison. Not used by myLab.
 ```
 
 Only `base-apps/` and `declarative/` are live. See
-[§10](#10-the-flux-track) for the Flux directories.
+[§10](#12-the-flux-track) for the Flux directories.
 
 ---
 
@@ -110,7 +114,8 @@ drift apart: `prune`, `selfHeal`, `PrunePropagationPolicy=foreground`,
 
 ### Enable or disable a component
 
-One line in `values.yaml`. Argo CD self-heals within ~3 minutes, or hit
+One line in `values.yaml`. Argo CD self-heals within ~2 minutes
+(`timeout.reconciliation` is `120s`), or hit
 **Refresh** on the `base-apps` app.
 
 ```yaml
@@ -138,7 +143,7 @@ charts:
 
 Then create `app_charts/my-tool/values.yaml` — **even if empty**. The template
 always references it and Argo CD errors on a missing value file
-(see [Gotchas](#9-gotchas)).
+(see [Gotchas](#11-gotchas)).
 
 ### Add a plain-manifest app
 
@@ -183,6 +188,7 @@ charts:
 | `autosync_enabled` | bool | Set `false` to drop `syncPolicy` entirely |
 | `extraValues` | map | Inline values merged over the `app_charts` file, **verbatim** |
 | `templatedValues` | map | Same, but rendered with `tpl` first — use for `global.dnsName` |
+| `wave` | int | `argocd.argoproj.io/sync-wave` on the Application — see [§7](#7-sync-waves) |
 | `valuesFilePath` | str | Per-source: look for values in a subdirectory of `app_charts/<name>/` |
 
 ---
@@ -198,6 +204,7 @@ charts:
 | `namespace` | str | Destination namespace (default: `dest_namespace`) |
 | `project` | str | Argo CD AppProject (default: `dest_project`) |
 | `autosync_enabled` | bool | Set `false` to drop `syncPolicy` entirely |
+| `wave` | int | `argocd.argoproj.io/sync-wave` on the Application — see [§7](#7-sync-waves) |
 
 An entry that is `enabled` without a `path` fails the render with a clear
 message rather than producing a broken Application.
@@ -239,7 +246,80 @@ loads the catalog alone.
 
 ---
 
-## 7. The DNS domain
+## 7. Sync waves
+
+Child Applications carry `argocd.argoproj.io/sync-wave`, set from the `wave` key.
+Argo CD syncs one wave at a time and will not start the next until every resource
+in the current one is Synced **and Healthy** — and because a child Application's
+health reflects its own sync, this sequences the whole platform.
+
+| Wave | Entries | Why |
+|---|---|---|
+| 0 | `external-secrets`, `kyverno`, `kro`, `vault-secrets-operator` | install CRDs |
+| 1 | `kube-prometheus-stack`, `policy-reporter`, `kargo`, `argo-rollouts` | need wave-0 CRDs; kps installs the Prometheus CRDs |
+| 2 | `php-apache`, `ghost`, `kyverno-policy`, `monitoring-extras` | workloads and CRs |
+| 3 | `vault` | see below |
+| 4 | `vault-config` | needs Vault initialised; autosync off |
+
+This is what makes `kyverno` → `kyverno-policy` and
+`kube-prometheus-stack` → `monitoring-extras` reliable rather than dependent on
+Argo CD's retries.
+
+The template uses `hasKey` rather than a truthiness test, so an explicit
+`wave: 0` is emitted instead of being silently dropped. Omitting `wave` entirely
+also means wave 0, since that is Argo CD's default.
+
+**Why Vault is last.** The Vault chart's readiness probe is `vault status`, which
+exits non-zero while Vault is sealed or uninitialised. A not-Ready pod never goes
+Healthy, so the `vault` Application never completes — and in an early wave it
+would stall every later wave behind a manual unseal step. Putting it last means a
+sealed Vault blocks only `vault-config`.
+
+## 8. Secrets: Vault, VSO and ESO
+
+Both operators are in the catalog, with a deliberate division of labour:
+
+| | Vault Secrets Operator | External Secrets Operator |
+|---|---|---|
+| Scope | Vault only | ~20 providers (Vault, AWS, Azure, GCP…) |
+| Use it for | anything **lease-managed** — dynamic DB creds, PKI | static secrets from any provider |
+| CRDs | `VaultAuth`, `VaultStaticSecret`, `VaultDynamicSecret`, `VaultPKISecret` | `SecretStore`, `ExternalSecret` |
+| Lease handling | renews, revokes on delete, can roll Deployments on rotation | none — a new lease per refresh, never revoked |
+
+The driver for adding VSO is **dynamic database credentials**. Vault's database
+engine issues short-lived per-app roles; ESO re-reads on an interval and neither
+renews nor revokes, so it accumulates orphaned leases and swaps the Secret under
+a running app. ESO stays enabled because it is provider-agnostic and the right
+tool for static secrets. If you would rather run a single operator, VSO's
+`VaultStaticSecret` covers static KV too — set `external-secrets.enabled: false`
+and accept Vault lock-in.
+
+### Vault's shape here
+
+`standalone` with file storage on a `local-path` PVC. No custom HCL: the chart's
+default `server.standalone.config` is already a tcp listener plus
+`storage "file" { path = "/vault/data" }`, so overriding it would mean
+maintaining the whole block to change nothing. The Agent Injector is disabled —
+VSO does the same job through CRDs, and the injector adds a mutating webhook to
+the admission path.
+
+`server.authDelegator.enabled` stays at its default `true`: Kubernetes auth
+requires Vault to call `TokenReview` to validate the ServiceAccount tokens VSO
+presents.
+
+### Vault needs manual initialisation
+
+Argo CD installs Vault; it cannot initialise it. `vault operator init` and
+`unseal` are one-time-per-cluster manual steps, and Vault **re-seals on every
+pod restart** — so after a reboot the `vault` app sits Progressing until you
+unseal. The runbook is in `myLab/README.md`.
+
+Auth is Kubernetes auth, not AppRole, specifically to avoid the bootstrap
+paradox: AppRole would need a role-id/secret-id pair planted in the cluster
+first, i.e. a secret in order to fetch secrets. With Kubernetes auth nothing is
+stored — Vault validates VSO's ServiceAccount token directly.
+
+## 9. The DNS domain
 
 Every component that exposes a UI gets its hostname from one value:
 
@@ -289,7 +369,7 @@ and fail.
 
 ---
 
-## 8. Rendering locally
+## 10. Rendering locally
 
 Always render before you push — the root app syncs automatically.
 
@@ -311,7 +391,7 @@ helm template b base-apps -f base-apps/values.yaml                              
 helm template b base-apps -f base-apps/values.yaml -f base-apps/values-dev.yaml  | grep -c '^kind: Application'
 helm template b base-apps -f base-apps/values.yaml -f base-apps/values-qa.yaml   | grep -c '^kind: Application'
 helm template b base-apps -f base-apps/values.yaml -f base-apps/values-prod.yaml | grep -c '^kind: Application'
-# expect 5, 9, 9, 9
+# expect 7, 11, 11, 11
 
 helm lint base-apps -f base-apps/values.yaml
 ```
@@ -324,7 +404,7 @@ helm show chart oci://ghcr.io/akuity/kargo-charts/kargo --version 1.12.5
 
 ---
 
-## 9. Gotchas
+## 11. Gotchas
 
 **OCI-hosted charts use the bare host — no `oci://` scheme.** Argo CD has two
 modes. A bare host plus `chart` means "Helm chart in an OCI registry" and
@@ -362,10 +442,27 @@ kubectl get app -n argocd <name> -o jsonpath='{.status.conditions}'
 **CRD-heavy charts need `serverSideApply: true`** or you hit the annotation size
 limit. Already set for `kyverno` and `kube-prometheus-stack`.
 
-**No sync waves.** Every child Application syncs concurrently, so CRD-before-CR
-ordering relies on Argo CD's retries. `apps.kyverno-policy` is the clearest case:
-its ClusterPolicies need the `charts.kyverno` CRDs to exist first, which is why
-it ships disabled and you enable it as a second step.
+**kube-prometheus-stack needs two k3s-specific fixes.** k3s runs the control
+plane as a single binary, so there is no `kube-scheduler`,
+`kube-controller-manager`, `kube-proxy` or `etcd` Service in `kube-system`. The
+chart scrapes all four by default, and the result is four permanently-Down
+targets firing `KubeSchedulerDown`, `KubeControllerManagerDown`, `KubeProxyDown`
+and `etcdMembersDown` forever — which makes the alerting surface useless on day
+one. All four are disabled in `app_charts/kube-prometheus-stack/values.yaml`,
+which removes 5 noise alerts and keeps 131 real ones. Separately, the chart's
+`prometheusSpec.storageSpec` default is `{}`, meaning **emptyDir** — every pod
+restart would discard all history — so it gets an explicit PVC.
+
+**Argo CD's own ServiceMonitors cannot come from the Argo CD chart.** Ansible
+installs Argo CD, which then installs kube-prometheus-stack, so the
+`monitoring.coreos.com/v1` CRD does not exist at Argo CD install time. The chart
+gates its ServiceMonitors on `.Capabilities.APIVersions.Has`, so
+`metrics.serviceMonitor.enabled: true` there renders **nothing, silently**. The
+Ansible values set only `metrics.enabled: true` (a Service, no CRD needed) and
+the ServiceMonitors ship from `declarative/apps/monitoring-extras` in wave 2.
+Their selectors are copied verbatim from the chart — worth knowing that three of
+the five metrics Services share `app.kubernetes.io/name: argocd-metrics`, so the
+`app.kubernetes.io/component` label is what actually disambiguates them.
 
 **Secrets are committed in plaintext.** `app_charts/kargo/values.yaml` holds an
 admin password hash and token signing key; `app_charts/keycloak/values.yaml` has
@@ -378,7 +475,7 @@ Both charts in this repo also share that name and version `1.8.5`.
 
 ---
 
-## 10. The Flux track
+## 12. The Flux track
 
 `fluxCD/` and `fluxChart/` are a parallel implementation of the same stack with
 Flux CD, kept deliberately for comparison. **`myLab` does not use them.**

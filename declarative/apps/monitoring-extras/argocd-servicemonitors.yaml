@@ -1,0 +1,125 @@
+---
+# ServiceMonitors for Argo CD's own metrics.
+#
+# These live here, not in the Argo CD Helm release, on purpose. Ansible installs
+# Argo CD first and Argo CD then installs kube-prometheus-stack, so at install
+# time the ServiceMonitor CRD does not exist yet. The chart gates its own
+# ServiceMonitors on `.Capabilities.APIVersions.Has "monitoring.coreos.com/v1"`,
+# so turning `metrics.serviceMonitor.enabled` on there would silently render
+# nothing on a first install. The Ansible values therefore set only
+# `metrics.enabled: true`, which creates the metrics Services and needs no CRD;
+# these CRs then arrive in sync wave 2, after kube-prometheus-stack (wave 1).
+#
+# Selectors and the `http-metrics` port name are copied verbatim from the chart's
+# own ServiceMonitor templates (argo-cd 10.18.0). Note three of the Services
+# share `app.kubernetes.io/name: argocd-metrics`, so the component label is what
+# actually disambiguates them - matching on name alone would scrape the wrong
+# targets. `app.kubernetes.io/instance` is the Helm release name, `argo-cd`,
+# set in myLab role-kube_init/tasks/argocd/argocd.yml.
+#
+# The `release: kube-prometheus-stack` label is required: the stack sets
+# serviceMonitorSelectorNilUsesHelmValues=true by default, so Prometheus only
+# picks up ServiceMonitors carrying its own release name.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-application-controller
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: [argocd]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-metrics
+      app.kubernetes.io/instance: argo-cd
+      app.kubernetes.io/component: application-controller
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-server
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: [argocd]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-server-metrics
+      app.kubernetes.io/instance: argo-cd
+      app.kubernetes.io/component: server
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-repo-server
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: [argocd]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-repo-server-metrics
+      app.kubernetes.io/instance: argo-cd
+      app.kubernetes.io/component: repo-server
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-applicationset-controller
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: [argocd]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-metrics
+      app.kubernetes.io/instance: argo-cd
+      app.kubernetes.io/component: applicationset-controller
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-notifications-controller
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: [argocd]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-metrics
+      app.kubernetes.io/instance: argo-cd
+      app.kubernetes.io/component: notifications-controller
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s

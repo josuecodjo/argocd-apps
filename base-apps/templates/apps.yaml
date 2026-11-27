@@ -29,6 +29,12 @@ kind: Application
 metadata:
   name: {{ $appName }}
   namespace: {{ $.Values.argocd_namespace }}
+  {{/* Sync wave. hasKey rather than a truthiness test, so an explicit
+       `wave: 0` is still emitted instead of being silently dropped. */}}
+  {{- if hasKey $app "wave" }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ $app.wave | quote }}
+  {{- end }}
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 
