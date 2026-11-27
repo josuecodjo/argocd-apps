@@ -1,17 +1,19 @@
 ---
 grafana:
-  # -- (bool) Enable Policy Reporter UI
+  # -- (bool) Enable Grafana
   enabled: true
 
   adminUser: admin
   adminPassword: admin
 
   ingress:
-    # -- Create Ingress
-    # This ingress exposes the policy-reporter core app.
+    # -- Create Ingress exposing Grafana
     enabled: true
-    # -- Ingress className
-    className: "traefik"
+    # -- Ingress class. NOTE the key is `ingressClassName`, not `className`:
+    # the Grafana subchart uses the former, so `className` was silently ignored
+    # and the rendered Ingress carried no class at all. It only worked because
+    # traefik is the default IngressClass on this cluster.
+    ingressClassName: "traefik"
     # -- Labels for the Ingress
     labels: {}
     # -- Annotations for the Ingress
@@ -23,6 +25,14 @@ grafana:
     # -- Ingress host list and TLS come from `templatedValues` in
     # base-apps/values.yaml, so the domain follows global.dnsName.
     path: /
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 # ---------------------------------------------------------------------------
 # k3s compatibility
@@ -76,12 +86,3 @@ alertmanager:
       limits:
         cpu: 200m
         memory: 256Mi
-
-grafana:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
