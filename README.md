@@ -1,0 +1,417 @@
+# argocd-apps — the platform catalog
+
+The GitOps payload for the [myLab](https://github.com/josuecodjo/myLab) homelab.
+`myLab` builds the cluster and applies **one** Argo CD Application; everything
+else in the cluster is declared here.
+
+A single Helm chart turns a values catalog into one Argo CD `Application` per
+component — no hand-written Application manifests, no vendored upstream charts.
+
+```
+myLab (ansible)
+   └─ applies Application "base-apps" ──┐
+                                        ▼
+                          base-apps/ (this repo, Helm chart)
+                                        │
+                     ┌──────────────────┴──────────────────┐
+                     ▼                                     ▼
+            values.charts (Helm charts)          values.apps (git paths)
+                     │                                     │
+   external-secrets, kyverno, policy-reporter,    php-apache, ghost,
+   falco, keycloak, argo-rollouts, kube-green,    kyverno-policy
+   kubernetes-dashboard, kube-prometheus-stack,
+   kro, kargo
+```
+
+---
+
+## Table of contents
+
+1. [Repository layout](#1-repository-layout)
+2. [How base-apps works](#2-how-base-apps-works)
+3. [Common tasks](#3-common-tasks)
+4. [Reference — `charts:` keys](#4-reference--charts-keys)
+5. [Reference — `apps:` keys](#5-reference--apps-keys)
+6. [Environment overlays](#6-environment-overlays)
+7. [The DNS domain](#7-the-dns-domain)
+8. [Rendering locally](#8-rendering-locally)
+9. [Gotchas](#9-gotchas)
+10. [The Flux track](#10-the-flux-track)
+
+---
+
+## 1. Repository layout
+
+```
+base-apps/                     ← the Argo CD chart. This is the entry point.
+├── Chart.yaml
+├── templates/
+│   ├── charts.yaml            # .Values.charts -> one Application per Helm chart
+│   ├── apps.yaml              # .Values.apps   -> one Application per git path
+│   └── _helpers.tpl           # the syncPolicy both templates share
+├── values.yaml                # THE CATALOG — chart repos, versions, namespaces
+├── values-dev.yaml            # overlays: differences only
+├── values-qa.yaml
+├── values-prod.yaml
+└── app_charts/<name>/
+    └── values.yaml            # your values for that upstream chart
+
+declarative/apps/<name>/       ← plain manifests Argo CD applies with kustomize
+├── ghost/                       (referenced from values.apps)
+├── php-apache/
+└── kyverno-policy/
+
+fluxCD/                        ← a parallel Flux CD implementation of the same
+fluxChart/                       stack, kept for comparison. Not used by myLab.
+```
+
+Only `base-apps/` and `declarative/` are live. See
+[§10](#10-the-flux-track) for the Flux directories.
+
+---
+
+## 2. How base-apps works
+
+[`templates/charts.yaml`](base-apps/templates/charts.yaml) ranges over
+`.Values.charts` and emits one Argo CD `Application` per enabled entry, using
+Argo CD's **multi-source** feature:
+
+```yaml
+sources:
+  - chart: kyverno                                   # upstream chart
+    repoURL: https://kyverno.github.io/kyverno
+    targetRevision: 3.8.1
+    helm:
+      valueFiles:
+        - $values/base-apps/app_charts/kyverno/values.yaml   # your values
+  - repoURL: https://github.com/josuecodjo/argocd-apps.git   # this repo,
+    targetRevision: HEAD                                     # as a values ref
+    ref: values
+```
+
+The second source exists only so `$values/` resolves — that's what lets your
+values live in git next to the catalog while the chart itself stays unvendored.
+A `ref` source must **not** carry a `path`, or Argo CD would also render this
+chart from it and duplicate every child Application.
+
+[`templates/apps.yaml`](base-apps/templates/apps.yaml) does the same for
+`.Values.apps`, emitting a single-source Application pointed at a directory of
+plain manifests in this repo.
+
+Both share one `syncPolicy` from
+[`_helpers.tpl`](base-apps/templates/_helpers.tpl), so the two halves can't
+drift apart: `prune`, `selfHeal`, `PrunePropagationPolicy=foreground`,
+`PruneLast=true`, `RespectIgnoreDifferences`, `ApplyOutOfSyncOnly`, and a
+5-attempt retry with exponential backoff.
+
+---
+
+## 3. Common tasks
+
+### Enable or disable a component
+
+One line in `values.yaml`. Argo CD self-heals within ~3 minutes, or hit
+**Refresh** on the `base-apps` app.
+
+```yaml
+charts:
+  kyverno:
+    enabled: true        # ← the whole change
+```
+
+### Tune a component
+
+Edit `app_charts/<name>/values.yaml`. These are passed to the upstream chart
+verbatim.
+
+### Add a new upstream Helm chart
+
+```yaml
+charts:
+  my-tool:
+    enabled: true
+    namespace: my-tool
+    helm:
+      - repoURL: https://charts.example.com
+        targetRevision: 1.2.3
+```
+
+Then create `app_charts/my-tool/values.yaml` — **even if empty**. The template
+always references it and Argo CD errors on a missing value file
+(see [Gotchas](#9-gotchas)).
+
+### Add a plain-manifest app
+
+Drop the manifests in `declarative/apps/<name>/` with a `kustomization.yml`,
+then:
+
+```yaml
+apps:
+  my-thing:
+    enabled: true
+    path: declarative/apps/my-thing
+    namespace: default
+```
+
+### Add a chart you maintain yourself
+
+Put it in `app_charts/<name>/` with its own `Chart.yaml` and declare
+`localChart: true`. See `kubernetes-dashboard`, which wraps the upstream chart to
+add a read-only user and RBAC.
+
+```yaml
+charts:
+  kubernetes-dashboard:
+    enabled: true
+    namespace: kubernetes-dashboard
+    helm:
+      - localChart: true     # tracks this repo's revision; no targetRevision needed
+```
+
+---
+
+## 4. Reference — `charts:` keys
+
+| Key | Type | Effect |
+|---|---|---|
+| `enabled` | bool | Render this Application at all |
+| `helm` | list | One entry per source: `repoURL` + `targetRevision`, or `localChart: true` |
+| `namespace` | str | Destination namespace (default: `dest_namespace`) |
+| `project` | str | Argo CD AppProject (default: `dest_project`) |
+| `chartName` | str | Chart name **and** `app_charts/` directory (default: the key) |
+| `serverSideApply` | bool | Adds `ServerSideApply=true` — needed for large CRDs |
+| `autosync_enabled` | bool | Set `false` to drop `syncPolicy` entirely |
+| `extraValues` | map | Inline values merged over the `app_charts` file, **verbatim** |
+| `templatedValues` | map | Same, but rendered with `tpl` first — use for `global.dnsName` |
+| `valuesFilePath` | str | Per-source: look for values in a subdirectory of `app_charts/<name>/` |
+
+---
+
+## 5. Reference — `apps:` keys
+
+| Key | Type | Effect |
+|---|---|---|
+| `enabled` | bool | Render this Application at all |
+| `path` | str | Directory in the repo holding the manifests (**required**) |
+| `repoURL` | str | Source repo (default: `spec.source.repoURL`) |
+| `targetRevision` | str | Source revision (default: `spec.source.targetRevision`) |
+| `namespace` | str | Destination namespace (default: `dest_namespace`) |
+| `project` | str | Argo CD AppProject (default: `dest_project`) |
+| `autosync_enabled` | bool | Set `false` to drop `syncPolicy` entirely |
+
+An entry that is `enabled` without a `path` fails the render with a clear
+message rather than producing a broken Application.
+
+> **Why not an ApplicationSet for `declarative/apps/*`?** A git *directories*
+> generator exposes only `path` and `path.basename`, so you get no per-app
+> namespace, no `enabled` toggle, and no per-environment differences — every
+> directory becomes an app in every environment. ApplicationSets are the right
+> tool when the set is open-ended and owned by someone else, which is why
+> `myLab/04-ArgoCD/02-teams.yml` and `05-fleet.yml` use them. If this folder
+> becomes self-service, move it to an ApplicationSet with a git **files**
+> generator (a small `config.yaml` per directory), which keeps auto-discovery
+> *and* per-app config.
+
+---
+
+## 6. Environment overlays
+
+`values.yaml` is the catalog: it owns chart repos, versions, namespaces and sync
+quirks. `values-dev|qa|prod.yaml` carry **only** differences — in practice just
+`enabled` toggles.
+
+Helm deep-merges maps, so an overlay entry inherits everything else:
+
+```yaml
+# values-dev.yaml — the whole file is ~20 lines
+charts:
+  kyverno:
+    enabled: true    # namespace, serverSideApply and version come from values.yaml
+```
+
+`myLab` selects one at bootstrap time with its `argocd_env` variable, which adds
+`values-<env>.yaml` to the root Application's `valueFiles`. Leaving it empty
+loads the catalog alone.
+
+> **Caveat:** Helm *replaces* lists rather than merging them. To pin a different
+> chart version in one environment you must restate the whole `helm:` entry in
+> that overlay.
+
+---
+
+## 7. The DNS domain
+
+Every component that exposes a UI gets its hostname from one value:
+
+```
+myLab vars/k8s.yml: global_dns_name
+        └─► root Application helm parameter `global.dnsName`
+                └─► templatedValues ──► each chart's ingress host + TLS SAN
+```
+
+Hostnames live in the `templatedValues` block of each catalog entry, because the
+five UI charts each use a different ingress schema — `api.host` (Kargo),
+`ingress.hostname` (Keycloak), `dashboard.ingress.hosts[]` (Rollouts),
+`ui.ingress.hosts[].host` (Policy Reporter), `grafana.ingress.hosts[]` (Grafana).
+No uniform block is possible, so each is written out once:
+
+```yaml
+charts:
+  kargo:
+    templatedValues:
+      api:
+        host: 'kargo.{{ .Values.global.dnsName }}'
+```
+
+Nothing is hardcoded in `app_charts/` — `grep -r home.lab base-apps/` returns
+only the `global.dnsName` default.
+
+| Component | Host |
+|---|---|
+| Argo Rollouts dashboard | `rollouts.<domain>` |
+| Kargo UI | `kargo.<domain>` |
+| Policy Reporter UI | `kyverno.<domain>` |
+| Grafana | `grafana.<domain>` |
+| Keycloak | `keycloak.<domain>` |
+
+TLS comes from `local-cluster-issuer`, a cert-manager `ca` ClusterIssuer that
+`myLab` bootstraps from a lab root CA. Trust that CA once and every host above
+is valid. The certificates carry no hardcoded domain, so changing
+`global_dns_name` just reissues them.
+
+### `extraValues` vs `templatedValues`
+
+`templatedValues` is rendered through Helm's `tpl`, so it can reference
+`{{ .Values.global.dnsName }}`. `extraValues` is passed through verbatim — keep
+anything containing literal Go template syntax there (Alertmanager notification
+templates, Falco rules, Grafana dashboards), or `tpl` will try to evaluate it
+and fail.
+
+---
+
+## 8. Rendering locally
+
+Always render before you push — the root app syncs automatically.
+
+```bash
+# the catalog alone
+helm template base-apps base-apps -f base-apps/values.yaml
+
+# with an environment overlay
+helm template base-apps base-apps -f base-apps/values.yaml -f base-apps/values-dev.yaml
+
+# check a different domain propagates
+helm template base-apps base-apps -f base-apps/values.yaml --set global.dnsName=lab.example.com \
+  | grep -E 'host|hostname'
+
+# list what each value-set produces
+# (written out rather than looped: zsh does not word-split unquoted vars,
+#  so building the "-f ..." flags in a variable silently renders nothing)
+helm template b base-apps -f base-apps/values.yaml                              | grep -c '^kind: Application'
+helm template b base-apps -f base-apps/values.yaml -f base-apps/values-dev.yaml  | grep -c '^kind: Application'
+helm template b base-apps -f base-apps/values.yaml -f base-apps/values-qa.yaml   | grep -c '^kind: Application'
+helm template b base-apps -f base-apps/values.yaml -f base-apps/values-prod.yaml | grep -c '^kind: Application'
+# expect 5, 9, 9, 9
+
+helm lint base-apps -f base-apps/values.yaml
+```
+
+Verify an OCI chart reference resolves before adding it:
+
+```bash
+helm show chart oci://ghcr.io/akuity/kargo-charts/kargo --version 1.12.5
+```
+
+---
+
+## 9. Gotchas
+
+**OCI-hosted charts use the bare host — no `oci://` scheme.** Argo CD has two
+modes. A bare host plus `chart` means "Helm chart in an OCI registry" and
+resolves as `<repoURL>/<chart>:<targetRevision>`. Adding `oci://` switches it to
+OCI-artifact mode, where `repoURL` is the *complete* reference and `chart` is
+**ignored**, so the chart segment never makes it into the request:
+
+```
+failed to resolve revision "1.12.5": cannot get digest for revision 1.12.5:
+HEAD "https://ghcr.io/v2/akuity/kargo-charts/manifests/1.12.5": 403 denied
+```
+
+Note the missing `/kargo`. ghcr.io answers `403 denied` for a repository that
+does not exist, so this looks like an auth failure when it is a path problem.
+Verified on Argo CD v3.6.1. Note that Flux is the opposite — its `OCIRepository`
+wants the full path *with* the scheme (`oci://ghcr.io/akuity/kargo-charts/kargo`),
+which is why `fluxCD/infra/kargo/ocirepository.yaml` looks different.
+
+**Every `charts:` entry needs `app_charts/<name>/values.yaml`, even empty.** The
+template always emits that `valueFiles` path and `ignoreMissingValueFiles` is not
+set, so a missing file fails manifest generation. Four entries carry no values at
+all for exactly this reason — `external-secrets` and `kube-green` are zero-byte,
+`kro` and `kyverno` contain only a `---` marker.
+
+**`Healthy` does not mean "working".** Health describes resources already in the
+cluster, so a fresh Application that cannot even fetch its chart still reports
+`Healthy` — only `SYNC: Unknown` reveals the failure. Always check both:
+
+```bash
+kubectl get app -n argocd -o custom-columns=\
+NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status
+kubectl get app -n argocd <name> -o jsonpath='{.status.conditions}'
+```
+
+**CRD-heavy charts need `serverSideApply: true`** or you hit the annotation size
+limit. Already set for `kyverno` and `kube-prometheus-stack`.
+
+**No sync waves.** Every child Application syncs concurrently, so CRD-before-CR
+ordering relies on Argo CD's retries. `apps.kyverno-policy` is the clearest case:
+its ClusterPolicies need the `charts.kyverno` CRDs to exist first, which is why
+it ships disabled and you enable it as a second step.
+
+**Secrets are committed in plaintext.** `app_charts/kargo/values.yaml` holds an
+admin password hash and token signing key; `app_charts/keycloak/values.yaml` has
+`admin`/`admin`. Fine for a lab, not for anything else — move them to External
+Secrets, which is already in the catalog.
+
+**`Chart.yaml` has a name with spaces** (`App of apps standard services`).
+`helm template` works, but `helm package` would produce an awkward archive name.
+Both charts in this repo also share that name and version `1.8.5`.
+
+---
+
+## 10. The Flux track
+
+`fluxCD/` and `fluxChart/` are a parallel implementation of the same stack with
+Flux CD, kept deliberately for comparison. **`myLab` does not use them.**
+
+| | Argo CD (`base-apps/`) | Flux (`fluxCD/`) |
+|---|---|---|
+| Rendering | Helm chart generates `Application`s | Plain manifests per app |
+| Source | multi-source `$values` ref | `HelmRepository` / `OCIRepository` |
+| Release | `Application` | `HelmRelease` |
+| Enable/disable | `enabled:` in values | comment a line in `infra/kustomization.yaml` |
+| Values | `app_charts/<name>/values.yaml` | inlined in each `helmrelease.yaml` |
+
+`fluxCD/` is the hand-written variant and the one wired up:
+
+```
+fluxCD/flux/sources.yaml                  GitRepository -> this repo
+fluxCD/flux/base-apps-kustomization.yaml  Kustomization -> ./fluxCD/infra
+fluxCD/infra/kustomization.yaml           the enable/disable list
+fluxCD/infra/<app>/                       helmrepository|ocirepository + helmrelease
+```
+
+`fluxChart/` is an earlier experiment: a Helm chart that generates
+`HelmRepository` + `HelmRelease` pairs from the same catalog shape, reading
+`app_charts/*/values.yaml` with `$.Files.Get` instead of Argo CD's `$values`
+ref.
+
+Both Flux directories have **drifted** from `base-apps/` and are not maintained
+in step with it:
+
+- older chart versions (Kargo 1.8.9 vs 1.12.5, kro 0.7.0 vs 0.10.0)
+- hostnames still hardcoded to `home.lab`; no `global.dnsName`
+- no `apps:` section, no `templatedValues`, no environment overlays
+- `fluxCD/infra/` carries a `vault` component that the Argo catalog does not
+
+Treat them as a reference for how the same stack looks under Flux, not as a
+deployable mirror.
