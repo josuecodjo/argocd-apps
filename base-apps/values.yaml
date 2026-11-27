@@ -120,14 +120,14 @@ charts:
       ui:
         ingress:
           hosts:
-            - host: 'kyverno.{{ .Values.global.dnsName }}'
+            - host: "kyverno.{{ .Values.global.dnsName }}"
               paths:
                 - path: /
                   pathType: Prefix
           tls:
             - secretName: kyverno-tls
               hosts:
-                - 'kyverno.{{ .Values.global.dnsName }}'
+                - "kyverno.{{ .Values.global.dnsName }}"
 
   # A runtime security tool that detects and alerts on anomalous
   # behavior or threats inside containers and on the host.
@@ -150,10 +150,10 @@ charts:
         targetRevision: 24.7.4
     templatedValues:
       ingress:
-        hostname: 'keycloak.{{ .Values.global.dnsName }}'
+        hostname: "keycloak.{{ .Values.global.dnsName }}"
         extraTls:
           - hosts:
-              - 'keycloak.{{ .Values.global.dnsName }}'
+              - "keycloak.{{ .Values.global.dnsName }}"
             secretName: keycloak-tls
 
   # ----------------------------------
@@ -173,11 +173,11 @@ charts:
       dashboard:
         ingress:
           hosts:
-            - 'rollouts.{{ .Values.global.dnsName }}'
+            - "rollouts.{{ .Values.global.dnsName }}"
           tls:
             - secretName: argo-rollouts-tls
               hosts:
-                - 'rollouts.{{ .Values.global.dnsName }}'
+                - "rollouts.{{ .Values.global.dnsName }}"
 
   # ----------------------------------
   # Category: Cost & Resource Optimization
@@ -219,11 +219,11 @@ charts:
       grafana:
         ingress:
           hosts:
-            - 'grafana.{{ .Values.global.dnsName }}'
+            - "grafana.{{ .Values.global.dnsName }}"
           tls:
             - secretName: grafana-tls
               hosts:
-                - 'grafana.{{ .Values.global.dnsName }}'
+                - "grafana.{{ .Values.global.dnsName }}"
 
   # ----------------------------------
   # Category: CRDs and abstraction
@@ -250,7 +250,7 @@ charts:
         targetRevision: 1.12.5
     templatedValues:
       api:
-        host: 'kargo.{{ .Values.global.dnsName }}'
+        host: "kargo.{{ .Values.global.dnsName }}"
 
   # ----------------------------------
   # Category: Secrets management
@@ -274,12 +274,12 @@ charts:
       server:
         ingress:
           hosts:
-            - host: 'vault.{{ .Values.global.dnsName }}'
+            - host: "vault.{{ .Values.global.dnsName }}"
               paths: []
           tls:
             - secretName: vault-tls
               hosts:
-                - 'vault.{{ .Values.global.dnsName }}'
+                - "vault.{{ .Values.global.dnsName }}"
 
   # Vault Secrets Operator. Chosen over External Secrets for the Vault path
   # because the target use case is DYNAMIC database credentials: VSO renews
@@ -350,8 +350,4 @@ apps:
     wave: 2
     path: declarative/apps/monitoring-extras
     namespace: monitoring
-    project: default
-
-    path: declarative/apps/kyverno-policy
-    namespace: default
     project: default
