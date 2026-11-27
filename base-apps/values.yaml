@@ -1,7 +1,44 @@
 ---
+# =============================================================================
+# base-apps - CATALOG
+# =============================================================================
+# This file is the single source of truth for *what* each platform component is:
+# its chart repository, version, target namespace and sync quirks.
+#
+# Per-environment files (values-dev.yaml, values-qa.yaml, values-prod.yaml)
+# contain ONLY the differences - in practice just `enabled` toggles. They are
+# layered on top of this file:
+#
+#   helm template base-apps -f base-apps/values.yaml -f base-apps/values-dev.yaml
+#
+# Helm deep-merges maps, so `charts.kyverno.enabled: true` in an overlay keeps
+# the `helm` and `namespace` keys defined here.
+#
+# CAVEAT: Helm *replaces* lists wholesale. To pin a different version in one
+# environment you must restate the whole `helm:` entry in that overlay, e.g.
+#
+#   charts:
+#     kyverno:
+#       helm:
+#         - repoURL: https://kyverno.github.io/kyverno
+#           targetRevision: 3.7.0
+#
+# Per-app keys understood by templates/charts.yaml:
+#   enabled           (bool)  render this Application at all
+#   helm              (list)  one entry per source: repoURL + targetRevision,
+#                             or `localChart: true` for a chart in app_charts/
+#   namespace         (str)   destination namespace      [default: dest_namespace]
+#   project           (str)   Argo CD AppProject         [default: dest_project]
+#   chartName         (str)   chart + app_charts/ dir    [default: the key]
+#   serverSideApply   (bool)  adds ServerSideApply=true (needed for big CRDs)
+#   autosync_enabled  (bool)  set false to drop syncPolicy entirely
+#   extraValues       (map)   inline values merged over the app_charts values
+# =============================================================================
+
 argocd_namespace: argocd
 dest_project: tools
 dest_namespace: tools
+
 spec:
   destination:
     server: https://kubernetes.default.svc
@@ -18,45 +55,46 @@ charts:
   # and syncs them into Kubernetes Secrets.
   external-secrets:
     enabled: false
-    helm:
-      - repoURL: "https://charts.external-secrets.io"
-        targetRevision: 0.14.3
     namespace: external-secrets
+    helm:
+      - repoURL: https://charts.external-secrets.io
+        targetRevision: 0.14.3
 
   # A policy engine for Kubernetes to validate, mutate, and generate resource
   # configurations, enforcing security and best practices.
   kyverno:
     enabled: false
+    namespace: kyverno
+    serverSideApply: true
     helm:
       - repoURL: https://kyverno.github.io/kyverno
         targetRevision: 3.8.1
-    namespace: kyverno
-    serverSideApply: true
 
+  # Dashboard and reporting for Kyverno PolicyReports.
   policy-reporter:
     enabled: false
+    namespace: policy-reporter
     helm:
       - repoURL: https://kyverno.github.io/policy-reporter
         targetRevision: 3.7.4
-    namespace: policy-reporter
 
   # A runtime security tool that detects and alerts on anomalous
   # behavior or threats inside containers and on the host.
   falco:
     enabled: false
+    namespace: falco
     helm:
       - repoURL: https://falcosecurity.github.io/charts
         targetRevision: 6.0.2
-    namespace: falco
 
   # An open-source Identity and Access Management (IAM) solution for
-  # features like Single Sign-On (SSO). (Currently disabled)
+  # features like Single Sign-On (SSO).
   keycloak:
     enabled: false
+    namespace: keycloak
     helm:
       - repoURL: https://charts.bitnami.com/bitnami
         targetRevision: 24.7.4
-    namespace: keycloak
 
   # ----------------------------------
   # Category: CI/CD & Deployment
@@ -66,10 +104,10 @@ charts:
   # releases for safer, controlled application updates.
   argo-rollouts:
     enabled: true
+    namespace: argo-rollouts
     helm:
       - repoURL: https://argoproj.github.io/argo-helm
         targetRevision: 2.43.11
-    namespace: argo-rollouts
 
   # ----------------------------------
   # Category: Cost & Resource Optimization
@@ -79,22 +117,31 @@ charts:
   # non-production environments during off-hours.
   kube-green:
     enabled: false
+    namespace: kube-green
     helm:
       - repoURL: https://kube-green.github.io/helm-charts
         targetRevision: 0.6.0
-    namespace: kube-green
 
   # ----------------------------------
   # Category: Observability & Management
   # ----------------------------------
 
+  # The official general-purpose, web-based UI for Kubernetes clusters.
+  # Wrapper chart in app_charts/ that adds a read-only user + RBAC, so it
+  # tracks this repo's revision rather than an upstream chart version.
+  kubernetes-dashboard:
+    enabled: false
+    namespace: kubernetes-dashboard
+    helm:
+      - localChart: true
+
   kube-prometheus-stack:
     enabled: false
+    namespace: monitoring
+    serverSideApply: true
     helm:
       - repoURL: https://prometheus-community.github.io/helm-charts
         targetRevision: 77.12.0
-    namespace: monitoring
-    serverSideApply: true
 
   # ----------------------------------
   # Category: CRDs and abstraction
@@ -102,10 +149,10 @@ charts:
 
   kro:
     enabled: true
-    helm:
-      - repoURL: registry.k8s.io/kro/charts
-        targetRevision: 0.10.0
     namespace: kro
+    helm:
+      - repoURL: oci://registry.k8s.io/kro/charts
+        targetRevision: 0.10.0
 
   # ----------------------------------
   # Category: Application Promotion
@@ -113,7 +160,42 @@ charts:
 
   kargo:
     enabled: true
-    helm:
-      - repoURL: ghcr.io/akuity/kargo-charts
-        targetRevision: 1.12.5
     namespace: kargo
+    helm:
+      - repoURL: oci://ghcr.io/akuity/kargo-charts
+        targetRevision: 1.12.5
+
+# =============================================================================
+# apps - plain git-path Applications
+# =============================================================================
+# Manifests Argo CD applies directly (kustomize or raw YAML) rather than Helm
+# charts. Same catalog/overlay rules as `charts` above: declare it here, toggle
+# `enabled` per environment. See templates/apps.yaml for the full key list.
+#
+# These replace the hand-written Application manifests that used to live in
+# declarative/root/, so the single root app now owns them too.
+# =============================================================================
+
+apps:
+  # Autoscaling demo: Deployment + Service + HPA.
+  php-apache:
+    enabled: true
+    path: declarative/apps/php-apache
+    namespace: default
+    project: default
+
+  # Blogging platform used as a plain-manifest example.
+  ghost:
+    enabled: true
+    path: declarative/apps/ghost
+    namespace: default
+    project: default
+
+  # Kyverno ClusterPolicies. Scoped to `tenant-*` namespaces, so enabling this
+  # does not affect php-apache or ghost in `default`. Needs the kyverno chart
+  # above to be enabled first (its CRDs must exist).
+  kyverno-policy:
+    enabled: false
+    path: declarative/apps/kyverno-policy
+    namespace: default
+    project: default

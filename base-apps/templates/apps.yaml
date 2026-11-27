@@ -1,0 +1,46 @@
+{{/*
+Plain git-path Applications - manifests that Argo CD applies directly
+(kustomize or raw YAML), as opposed to the Helm charts in charts.yaml.
+
+Each entry under .Values.apps becomes one Application:
+
+  apps:
+    php-apache:
+      enabled: true
+      path: declarative/apps/php-apache
+
+Per-app keys:
+  enabled           (bool)  render this Application at all
+  path              (str)   directory in the repo holding the manifests
+  repoURL           (str)   source repo            [default: spec.source.repoURL]
+  targetRevision    (str)   source revision        [default: spec.source.targetRevision]
+  namespace         (str)   destination namespace  [default: dest_namespace]
+  project           (str)   Argo CD AppProject     [default: dest_project]
+  autosync_enabled  (bool)  set false to drop syncPolicy entirely
+*/}}
+{{- range $appName, $app := .Values.apps }}
+{{- if $app.enabled }}
+{{- if not $app.path }}
+{{- fail (printf "apps.%s is enabled but has no `path`" $appName) }}
+{{- end }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $appName }}
+  namespace: {{ $.Values.argocd_namespace }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+
+spec:
+  project: {{ $app.project | default $.Values.dest_project }}
+  source:
+    repoURL: {{ $app.repoURL | default $.Values.spec.source.repoURL }}
+    targetRevision: {{ $app.targetRevision | default $.Values.spec.source.targetRevision }}
+    path: {{ $app.path }}
+  destination:
+    server: {{ $.Values.spec.destination.server }}
+    namespace: {{ $app.namespace | default $.Values.dest_namespace }}
+  {{- include "base-apps.syncPolicy" (dict "app" $app) | nindent 2 }}
+{{- end }}
+{{- end }}
