@@ -29,9 +29,18 @@ spec:
           {{- else }}
           - $values/base-apps/app_charts/{{ $app.chartName | default $appName }}/{{ $repo.valuesFilePath }}/values.yaml
           {{- end }}
-        {{- if $app.extraValues }}
+        {{/* extraValues is passed through verbatim. templatedValues is rendered
+             with `tpl` first, so it can reference values such as
+             {{ .Values.global.dnsName }}. Keep anything containing literal Go
+             template syntax (alert templates, Falco rules) in extraValues. */}}
+        {{- $vals := $app.extraValues | default dict }}
+        {{- if $app.templatedValues }}
+        {{- $rendered := tpl ($app.templatedValues | toYaml) $ | fromYaml }}
+        {{- $vals = mustMergeOverwrite (deepCopy $vals) $rendered }}
+        {{- end }}
+        {{- if $vals }}
         valuesObject:
-          {{- $app.extraValues | toYaml | nindent 10 }}
+          {{- $vals | toYaml | nindent 10 }}
         {{- end }}
       {{- end }}
     {{/* Values-only source. A `ref` source must not set `path`, otherwise Argo CD

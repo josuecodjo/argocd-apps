@@ -17,17 +17,8 @@ ui:
       cert-manager.io/cluster-issuer: local-cluster-issuer
       cert-manager.io/propagation-timeout: "30s"
       cert-manager.io/polling-interval: "5s"
-    # -- Ingress host list
-    hosts:
-      - host: kyverno.home.lab
-        paths:
-          - path: /
-            pathType: Prefix
-
-    tls:
-      - secretName: kyverno-tls
-        hosts:
-          - kyverno.home.lab
+    # -- Ingress host list and TLS come from `templatedValues` in
+    # base-apps/values.yaml, so the domain follows global.dnsName.
 
 metrics:
   # -- Enables Prometheus Metrics

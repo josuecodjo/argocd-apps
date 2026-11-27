@@ -39,6 +39,13 @@ argocd_namespace: argocd
 dest_project: tools
 dest_namespace: tools
 
+# Ingress suffix for every component that exposes a UI. Overridden at bootstrap
+# time by Ansible, which passes its own `global_dns_name` as a Helm parameter, so
+# this value and the Argo CD host always come from the same variable.
+# Referenced from `templatedValues` entries below as {{ .Values.global.dnsName }}.
+global:
+  dnsName: home.lab
+
 spec:
   destination:
     server: https://kubernetes.default.svc
@@ -77,6 +84,18 @@ charts:
     helm:
       - repoURL: https://kyverno.github.io/policy-reporter
         targetRevision: 3.7.4
+    templatedValues:
+      ui:
+        ingress:
+          hosts:
+            - host: 'kyverno.{{ .Values.global.dnsName }}'
+              paths:
+                - path: /
+                  pathType: Prefix
+          tls:
+            - secretName: kyverno-tls
+              hosts:
+                - 'kyverno.{{ .Values.global.dnsName }}'
 
   # A runtime security tool that detects and alerts on anomalous
   # behavior or threats inside containers and on the host.
@@ -95,6 +114,13 @@ charts:
     helm:
       - repoURL: https://charts.bitnami.com/bitnami
         targetRevision: 24.7.4
+    templatedValues:
+      ingress:
+        hostname: 'keycloak.{{ .Values.global.dnsName }}'
+        extraTls:
+          - hosts:
+              - 'keycloak.{{ .Values.global.dnsName }}'
+            secretName: keycloak-tls
 
   # ----------------------------------
   # Category: CI/CD & Deployment
@@ -108,6 +134,15 @@ charts:
     helm:
       - repoURL: https://argoproj.github.io/argo-helm
         targetRevision: 2.43.11
+    templatedValues:
+      dashboard:
+        ingress:
+          hosts:
+            - 'rollouts.{{ .Values.global.dnsName }}'
+          tls:
+            - secretName: argo-rollouts-tls
+              hosts:
+                - 'rollouts.{{ .Values.global.dnsName }}'
 
   # ----------------------------------
   # Category: Cost & Resource Optimization
@@ -142,6 +177,15 @@ charts:
     helm:
       - repoURL: https://prometheus-community.github.io/helm-charts
         targetRevision: 77.12.0
+    templatedValues:
+      grafana:
+        ingress:
+          hosts:
+            - 'grafana.{{ .Values.global.dnsName }}'
+          tls:
+            - secretName: grafana-tls
+              hosts:
+                - 'grafana.{{ .Values.global.dnsName }}'
 
   # ----------------------------------
   # Category: CRDs and abstraction
@@ -164,6 +208,9 @@ charts:
     helm:
       - repoURL: oci://ghcr.io/akuity/kargo-charts
         targetRevision: 1.12.5
+    templatedValues:
+      api:
+        host: 'kargo.{{ .Values.global.dnsName }}'
 
 # =============================================================================
 # apps - plain git-path Applications
