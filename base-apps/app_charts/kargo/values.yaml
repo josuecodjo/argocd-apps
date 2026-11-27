@@ -1,6 +1,7 @@
 ---
 api:
-  host: kargo.home.lab
+  # host comes from `templatedValues` in base-apps/values.yaml,
+  # so the domain follows global.dnsName.
   adminAccount:
     ## @param api.adminAccount.enabled Whether to enable the admin account.
     enabled: true

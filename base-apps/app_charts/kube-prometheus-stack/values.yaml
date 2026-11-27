@@ -20,13 +20,6 @@ grafana:
       cert-manager.io/cluster-issuer: local-cluster-issuer
       cert-manager.io/propagation-timeout: "30s"
       cert-manager.io/polling-interval: "5s"
-    # -- Ingress host list
-    hosts:
-      - grafana.home.lab
-
+    # -- Ingress host list and TLS come from `templatedValues` in
+    # base-apps/values.yaml, so the domain follows global.dnsName.
     path: /
-
-    tls:
-      - secretName: grafana-tls
-        hosts:
-          - grafana.home.lab

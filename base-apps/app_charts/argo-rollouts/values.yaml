@@ -18,18 +18,11 @@ dashboard:
       cert-manager.io/propagation-timeout: "30s"
       cert-manager.io/polling-interval: "5s"
 
-    # -- Ingress host list
-    hosts:
-      - rollouts.home.lab
-
+    # -- Ingress host list and TLS come from `templatedValues` in
+    # base-apps/values.yaml, so the domain follows global.dnsName.
     paths:
       - /
     pathType: Prefix
-
-    tls:
-      - secretName: argo-rollouts-tls
-        hosts:
-          - rollouts.home.lab
 
 controller:
   metrics:

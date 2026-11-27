@@ -7,17 +7,14 @@ service:
 
 ingress:
   enabled: true
-  hostname: keycloak.home.lab
+  # hostname and extraTls come from `templatedValues` in base-apps/values.yaml,
+  # so the domain follows global.dnsName.
   annotations:
     # kubernetes.io/ingress.class: traefik
     cert-manager.io/cluster-issuer: local-cluster-issuer
     cert-manager.io/propagation-timeout: "30s"
     cert-manager.io/polling-interval: "5s"
   tls: true
-  extraTls:
-    - hosts:
-        - keycloak.home.lab
-      secretName: keycloak-tls
 
 postgresql:
   enabled: true
