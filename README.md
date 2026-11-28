@@ -199,6 +199,7 @@ one cluster — see [§9](#9-multi-cluster-hub-and-spoke):
 |---|---|---|
 | `appNameSuffix` | str | Appended to every generated Application name. **Must be `""` on the hub.** |
 | `clusterName` | str | Becomes Prometheus' `cluster` external label. Distinct per cluster. |
+| `renderedForCluster` | str | Set by the ApplicationSet only; leave `""`. Checked against `clusterName` to refuse a render that would collide — see [§9](#9-multi-cluster-hub-and-spoke). |
 
 ---
 
@@ -429,6 +430,67 @@ CA that the hub does not trust, Traefik here does not force HTTPS, and the traff
 is LAN-internal. Also note Grafana runs in a *pod*, so the spoke hostname has to
 resolve through CoreDNS, not the node's `/etc/hosts` — hence
 `myLab/04-ArgoCD/manual/coredns-custom.yaml`.
+
+### Adding a cluster — both steps, or neither
+
+Registering a cluster and committing its values file are **one change, not two**:
+
+1. create the registration Secret with `lab.homelab/managed: "true"` and
+   `name: <cluster>` (see `myLab` step 13);
+2. commit `base-apps/values-<cluster>.yaml` containing **both**
+   `clusterName: <cluster>` and `appNameSuffix: "-<cluster>"`.
+
+Do only (1) and the chart refuses to render for that cluster:
+
+```
+base-apps: refusing to render for cluster "staging" because clusterName is "prod".
+Create base-apps/values-staging.yaml with `clusterName: staging` and
+`appNameSuffix: "-staging"` ...
+```
+
+That is deliberate. Without the values file the render falls back to the catalog
+defaults, where `appNameSuffix` is `""` — so **every** child Application comes out
+named exactly as the hub's are, and two root apps fight over the same objects.
+The guard at the top of `templates/charts.yaml` compares `renderedForCluster`
+(passed by the ApplicationSet) against `clusterName` (from the values file) and
+fails rather than let that happen. `ignoreMissingValueFiles` is deliberately
+**not** set on the ApplicationSet for the same reason: a missing file should break
+one Application loudly, not collide silently.
+
+The hub is the one cluster that keeps `appNameSuffix: ""` — its Applications are
+already running under those names, and renaming them would make Argo CD delete
+and recreate every component.
+
+> Note the suffix cannot simply be derived from the cluster name by the
+> ApplicationSet. Argo CD applies `parameters` as `--set`, which **beats**
+> `valueFiles`, so the hub could not override it back to `""` — it would become
+> `-prod` and every running Application would be renamed. Hence: suffix in the
+> values file, guard to make forgetting it safe.
+
+### If two roots ever do fight
+
+Detect it — any child owned by a root that no longer exists, or counts that do
+not add up to one root per cluster:
+
+```bash
+kubectl get app -n argocd -o jsonpath='{range .items[*]}{.metadata.annotations.argocd\.argoproj\.io/tracking-id}{"\n"}{end}' \
+  | cut -d: -f1 | sort | uniq -c
+```
+
+Removing the extra root is **not** enough, and this is the part that surprises
+people: deleting it leaves the children carrying `tracking-id: <old-root>:...`,
+and Argo CD will not take over a resource tracked by another app. The new root
+sits `OutOfSync` with a stale `SharedResourceWarning` naming an app that no
+longer exists. Rewrite the annotation to the new parent — which is exactly what
+Argo CD itself writes:
+
+```bash
+kubectl annotate app <child> -n argocd \
+  argocd.argoproj.io/tracking-id=<new-root>:argoproj.io/Application:argocd/<child> --overwrite
+```
+
+Adoption then completes on the next refresh. And strip the finalizer *before*
+deleting any root app, or the delete cascades into pruning everything it owns.
 
 ### Scope and risk
 

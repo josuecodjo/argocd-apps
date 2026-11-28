@@ -84,6 +84,12 @@ appNameSuffix: ""
 # 61 `cluster=` selectors), so every cluster needs a distinct value.
 clusterName: prod
 
+# Set by the base-apps ApplicationSet to the cluster it is rendering for, and
+# checked against clusterName by the guard at the top of templates/charts.yaml.
+# Leave this empty: an empty value makes the guard inert, which is what a local
+# `helm template` wants. Only the ApplicationSet should ever set it.
+renderedForCluster: ""
+
 # Ingress suffix for every component that exposes a UI. Overridden at bootstrap
 # time by Ansible, which passes its own `global_dns_name` as a Helm parameter, so
 # this value and the Argo CD host always come from the same variable.

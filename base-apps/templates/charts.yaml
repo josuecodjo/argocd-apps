@@ -1,3 +1,20 @@
+{{- /* COLLISION GUARD - runs on every render, before anything is emitted.
+
+   The ApplicationSet passes the cluster it is rendering for. If that disagrees
+   with clusterName (which comes from values-<cluster>.yaml), then that file is
+   missing or belongs to a different cluster - and appNameSuffix is therefore the
+   catalog default "", which names every child Application exactly as the hub's
+   are. Two root apps would then fight over the same objects, which is the
+   failure this whole suffix scheme exists to prevent. Refuse to render instead.
+
+   An empty renderedForCluster means a local `helm template`, where there is no
+   cluster to check against, so the guard is inert and local rendering is
+   unchanged. Only the ApplicationSet sets it. */}}
+{{- if and .Values.renderedForCluster (ne .Values.renderedForCluster .Values.clusterName) }}
+{{-   fail (printf "base-apps: refusing to render for cluster %q because clusterName is %q. Create base-apps/values-%s.yaml with `clusterName: %s` and `appNameSuffix: \"-%s\"` (only the hub keeps appNameSuffix empty). Without it every child Application would be named identically to the hub's and the two root apps would fight over them."
+        .Values.renderedForCluster .Values.clusterName
+        .Values.renderedForCluster .Values.renderedForCluster .Values.renderedForCluster) }}
+{{- end }}
 {{- range $appName, $app := .Values.charts }}
 {{- if $app.enabled }}
 ---
