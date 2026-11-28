@@ -1,0 +1,9 @@
+---
+# Everything in the chain lives here, and that is not cosmetic: VSO writes the
+# rendered Secret into the namespace of the VaultStaticSecret, and the consuming
+# pod has to be in that namespace to mount it. Co-locating keeps one Vault role
+# binding and one place to look when it breaks.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vault-demo

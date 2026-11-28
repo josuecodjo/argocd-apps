@@ -1,0 +1,17 @@
+---
+# How VSO authenticates to Vault for the secrets in this namespace.
+#
+# `vaultConnectionRef` is deliberately omitted: the operator's Helm values set
+# defaultVaultConnection (http://vault.vault.svc.cluster.local:8200), so every CR
+# in the cluster inherits the address and there is one place to change it.
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultAuth
+metadata:
+  name: vault-demo
+  namespace: vault-demo
+spec:
+  method: kubernetes
+  mount: kubernetes            # the auth path: `vault auth enable kubernetes`
+  kubernetes:
+    role: vso-demo             # `vault write auth/kubernetes/role/vso-demo ...`
+    serviceAccount: vault-demo

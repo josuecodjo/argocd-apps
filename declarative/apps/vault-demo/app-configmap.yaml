@@ -1,0 +1,102 @@
+---
+# The whole app, as a ConfigMap. No Dockerfile, no registry, no CI - it runs on
+# the upstream python:3-alpine image.
+#
+# The point of the handler is that it re-reads the mounted FILE on every request
+# while the env var was captured once at process start. That contrast is the
+# lesson; see the comments in deployment.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-demo-app
+  namespace: vault-demo
+data:
+  app.py: |
+    """Show a Vault-delivered secret two ways, to expose how they differ.
+
+    WARNING: this prints a secret on an unauthenticated page. That is the entire
+    point of the demo - and exactly why the value must stay a throwaway. Never
+    point this at a real credential.
+    """
+    import os, datetime
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    SECRET_DIR = "/vault/secrets"
+
+    # Captured ONCE, at process start. This is the whole problem with env vars:
+    # when Vault rotates the secret, VSO updates the Kubernetes Secret and the
+    # kubelet updates the mounted file - but this string never changes again. It
+    # can only be refreshed by restarting the pod, which is what VSO's
+    # `rolloutRestartTargets` exists to do.
+    ENV_AT_BOOT = {
+        "username": os.environ.get("USERNAME", "<not set>"),
+        "password": os.environ.get("PASSWORD", "<not set>"),
+    }
+    BOOT_TIME = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+    def read_mounted(key):
+        """Read from disk on every call, so rotation is visible without a restart."""
+        try:
+            with open(os.path.join(SECRET_DIR, key), encoding="utf-8") as fh:
+                return fh.read().strip()
+        except FileNotFoundError:
+            return "<no such file - is the Secret mounted?>"
+        except OSError as exc:
+            return f"<unreadable: {exc}>"
+
+    def panel(title, note, values):
+        rows = "".join(
+            f"<tr><th>{k}</th><td><code>{v}</code></td></tr>" for k, v in values.items()
+        )
+        return (f"<section><h2>{title}</h2><p class=note>{note}</p>"
+                f"<table>{rows}</table></section>")
+
+    PAGE = """<!doctype html><meta charset=utf-8>
+    <title>Vault + VSO demo</title>
+    <style>
+      body{{font:15px/1.5 system-ui,sans-serif;margin:2rem auto;max-width:44rem;padding:0 1rem}}
+      section{{border:1px solid #d0d7de;border-radius:8px;padding:0 1rem 1rem;margin:1rem 0}}
+      table{{border-collapse:collapse;width:100%}}
+      th{{text-align:left;width:9rem;font-weight:600;padding:.3rem 0}}
+      td code{{background:#f6f8fa;padding:.15rem .4rem;border-radius:4px}}
+      .note{{color:#57606a;font-size:13px;margin:.2rem 0 .8rem}}
+      .warn{{background:#fff8c5;border:1px solid #d4a72c;border-radius:6px;padding:.6rem 1rem}}
+    </style>
+    <h1>Vault &rarr; VSO &rarr; Kubernetes Secret</h1>
+    <p class=warn><strong>Demo only.</strong> This page prints a secret with no
+    authentication. Keep the value disposable.</p>
+    {live}
+    {stale}
+    <p class=note>pod started {boot} &middot; rendered {now}<br>
+    Rotate it: <code>vault kv put secret/demo username=demo-user password=NEW</code>
+    &mdash; the mounted file follows within about a minute, the env var never does.</p>
+    """
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path not in ("/", "/index.html"):
+                self.send_error(404)
+                return
+            live = {"username": read_mounted("username"), "password": read_mounted("password")}
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+            body = PAGE.format(
+                live=panel("From the mounted file", "Re-read on every request. Updates when Vault rotates.", live),
+                stale=panel("From the environment variable", "Captured once at pod start. Goes stale on rotation.", ENV_AT_BOOT),
+                boot=BOOT_TIME, now=now,
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            # Logged so the value is readable in the Argo CD UI's log pane -
+            # no port-forward and no exec needed.
+            print(f"[{now}] file={live['password']!r}  env={ENV_AT_BOOT['password']!r}", flush=True)
+
+        def log_message(self, *args):
+            pass   # suppress the default per-request access log; we print our own
+
+    if __name__ == "__main__":
+        print(f"listening on :8080, reading {SECRET_DIR}", flush=True)
+        HTTPServer(("", 8080), Handler).serve_forever()

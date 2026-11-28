@@ -1,5 +1,0 @@
----
-resources:
-  - serviceaccount.yaml
-  - vault-auth.yaml
-  - demo-secret.yaml

@@ -1,0 +1,9 @@
+---
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - vault-auth.yaml
+  - static-secret.yaml
+  - app-configmap.yaml
+  - deployment.yaml
+  - service.yaml

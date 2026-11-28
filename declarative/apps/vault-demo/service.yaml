@@ -1,0 +1,26 @@
+---
+# ClusterIP only, matching the other declarative/apps entries (ghost,
+# php-apache). No Ingress on purpose: entries under declarative/apps are
+# rendered by kustomize, not Helm, so they get no templatedValues - a hostname
+# would have to be hardcoded, which breaks the single-source-of-truth for DNS
+# (global.dnsName) that the rest of the platform follows.
+#
+# View it with:
+#   kubectl port-forward -n vault-demo svc/vault-demo 8080:80
+#
+# If you want a real hostname later, convert this to a `localChart: true` entry
+# under app_charts/ (kubernetes-dashboard is the precedent) and the host then
+# follows global.dnsName like every other UI.
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault-demo
+  namespace: vault-demo
+spec:
+  type: ClusterIP
+  selector:
+    app: vault-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

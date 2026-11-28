@@ -20,7 +20,7 @@ myLab (ansible)
    external-secrets, kyverno, policy-reporter,    php-apache, ghost,
    falco, keycloak, argo-rollouts, kube-green,    kyverno-policy,
    kubernetes-dashboard, kube-prometheus-stack,   monitoring-extras,
-   kro, kargo, vault, vault-secrets-operator      vault-config
+   kro, kargo, vault, vault-secrets-operator      vault-demo
 ```
 
 ---
@@ -64,7 +64,7 @@ declarative/apps/<name>/       ← plain manifests Argo CD applies with kustomiz
 ├── php-apache/
 ├── kyverno-policy/
 ├── monitoring-extras/           ServiceMonitors for Argo CD's metrics
-└── vault-config/                VaultAuth + the demo secret for VSO
+└── vault-demo/                  Vault -> VSO -> Secret -> pod, end to end
 
 fluxCD/                        ← a parallel Flux CD implementation of the same
 fluxChart/                       stack, kept for comparison. Not used by myLab.
@@ -270,7 +270,7 @@ health reflects its own sync, this sequences the whole platform.
 | 1 | `kube-prometheus-stack`, `policy-reporter`, `kargo`, `argo-rollouts` | need wave-0 CRDs; kps installs the Prometheus CRDs |
 | 2 | `php-apache`, `ghost`, `kyverno-policy`, `monitoring-extras` | workloads and CRs |
 | 3 | `vault` | see below |
-| 4 | `vault-config` | needs Vault initialised; autosync off |
+| 4 | `vault-demo` | needs Vault initialised; autosync off |
 
 This is what makes `kyverno` → `kyverno-policy` and
 `kube-prometheus-stack` → `monitoring-extras` reliable rather than dependent on
@@ -284,7 +284,7 @@ also means wave 0, since that is Argo CD's default.
 exits non-zero while Vault is sealed or uninitialised. A not-Ready pod never goes
 Healthy, so the `vault` Application never completes — and in an early wave it
 would stall every later wave behind a manual unseal step. Putting it last means a
-sealed Vault blocks only `vault-config`.
+sealed Vault blocks only `vault-demo`.
 
 ## 8. Secrets: Vault, VSO and ESO
 
@@ -317,6 +317,27 @@ the admission path.
 `server.authDelegator.enabled` stays at its default `true`: Kubernetes auth
 requires Vault to call `TokenReview` to validate the ServiceAccount tokens VSO
 presents.
+
+### Mounted files refresh; env vars do not
+
+This catches people out, so `declarative/apps/vault-demo/` is built to show it.
+The same secret is delivered to one pod **both** ways:
+
+| Delivery | On rotation |
+|---|---|
+| `volumeMounts` → a file | **updates** — this cluster's kubelet runs `configMapAndSecretChangeDetectionStrategy: Watch` with `syncFrequency: 1m0s`, so a new value lands within about a minute |
+| `env.valueFrom.secretKeyRef` | **never updates** — captured once at container start; Kubernetes cannot change a running process's environment |
+
+The demo page renders both panels, so rotating the value in Vault visibly moves
+one and leaves the other stale. That is why VSO has `rolloutRestartTargets`: for
+consumers that can only read env vars, the answer is to restart them.
+
+It also logs every read, so the live value is visible in the **Argo CD UI's log
+pane** — no port-forward, no ingress, and notably no `exec.enabled`, which stays
+off.
+
+> The demo page prints a secret over unauthenticated HTTP. That is the point of
+> the demo and the reason the value must stay disposable.
 
 ### Vault needs manual initialisation
 

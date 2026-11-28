@@ -61,7 +61,7 @@
 #                                next wave until the current one is - so Vault
 #                                in an early wave would stall the whole
 #                                bootstrap behind a human unseal step.
-#   4  vault-config              needs Vault initialised; autosync is off
+#   4  vault-demo                needs Vault initialised; autosync is off
 # =============================================================================
 
 argocd_namespace: argocd
@@ -349,16 +349,22 @@ apps:
   kyverno-policy:
     enabled: false
     wave: 2
-  # VSO wiring: a ServiceAccount, the VaultAuth that authenticates as it, and a
-  # throwaway demo secret proving the chain works. Wave 4 and autosync off: it
-  # can only succeed after Vault is initialised and the Kubernetes auth role
-  # exists, so it is synced by hand once per cluster.
-  vault-config:
-    enabled: false
+  # The Vault -> VSO -> Secret -> pod chain, end to end and visible: a
+  # ServiceAccount, the VaultAuth that authenticates as it, a VaultStaticSecret
+  # over KV v2, and a tiny app that displays the delivered value BOTH from a
+  # mounted file (updates on rotation) and from an env var (does not). See
+  # declarative/apps/vault-demo/deployment.yaml for why that contrast matters.
+  #
+  # Wave 4: after vault (3) and vault-secrets-operator (0).
+  # autosync off: it cannot succeed until the Vault Kubernetes auth role exists,
+  # and a Degraded app sitting in the UI until then is just noise. Sync it by
+  # hand once, after the Vault setup in myLab/README.md step 11.
+  vault-demo:
+    enabled: true
     wave: 4
     autosync_enabled: false
-    path: declarative/apps/vault-config
-    namespace: vault-secrets-operator
+    path: declarative/apps/vault-demo
+    namespace: vault-demo
     project: default
 
   # ServiceMonitors for the Argo CD metrics Services. These live here rather

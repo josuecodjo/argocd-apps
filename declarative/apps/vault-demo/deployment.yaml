@@ -1,0 +1,93 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-demo
+  namespace: vault-demo
+  labels:
+    app: vault-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault-demo
+  template:
+    metadata:
+      labels:
+        app: vault-demo
+    spec:
+      # Must match the Vault role's bound_service_account_names, or VSO cannot
+      # authenticate and the Secret is never created.
+      serviceAccountName: vault-demo
+      containers:
+        - name: app
+          image: python:3-alpine
+          command: ["python", "/app/app.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+
+          # ---- the same secret, delivered two ways, on purpose ----
+          #
+          # 1) As ENV VARS. These are read once when the container starts and
+          #    are then frozen for the life of the process. When Vault rotates
+          #    the value, these DO NOT CHANGE. Kubernetes has no mechanism to
+          #    update a running process's environment.
+          env:
+            - name: USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: vault-demo-creds
+                  key: username
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vault-demo-creds
+                  key: password
+
+          volumeMounts:
+            - name: app
+              mountPath: /app
+            # 2) As FILES. The kubelet keeps a mounted Secret in sync with the
+            #    API object. On this cluster it uses
+            #    configMapAndSecretChangeDetectionStrategy: Watch with
+            #    syncFrequency 1m0s, so a rotated value lands here within about
+            #    a minute - and the app re-reads the file per request, so no
+            #    restart is needed.
+            #
+            #    readOnly because nothing should ever write to it.
+            - name: vault-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+      volumes:
+        - name: app
+          configMap:
+            name: vault-demo-app
+        - name: vault-secrets
+          secret:
+            # Created by the VaultStaticSecret, not by git. The pod stays in
+            # ContainerCreating until VSO has authenticated to Vault and written
+            # it - which makes a broken Vault role very visible.
+            secretName: vault-demo-creds
