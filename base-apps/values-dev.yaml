@@ -1,18 +1,50 @@
 ---
 # =============================================================================
-# dev overlay - OVERRIDES ONLY
+# dev = a SPOKE cluster overlay
 # =============================================================================
-# Layered on top of values.yaml; see that file for the full catalog and for
-# the list-replacement caveat when pinning a per-environment chart version.
+# Loaded by the base-apps ApplicationSet as `values-{{ .name }}.yaml`. Layered on
+# values.yaml, so anything absent here is inherited from the catalog.
 #
-#   helm template base-apps -f base-apps/values.yaml -f base-apps/values-dev.yaml
-#
-# Keep this file to actual differences. Anything absent here is inherited.
+# The dev cluster has no Argo CD and no Grafana of its own: the hub supervises
+# both. Its Prometheus is local (so a network blip loses nothing) and the hub's
+# Grafana reads it as a second datasource.
 # =============================================================================
 
+# Spokes MUST set a suffix, or their Applications collide with the hub's in the
+# hub's shared argocd namespace.
+appNameSuffix: "-dev"
+
+clusterName: dev
+
+global:
+  dnsName: dev.lab
+
 charts:
-  # Security & policy stack is on in every environment today.
+  # Keep dev minimal: no Vault here.
   vault:
     enabled: false
   vault-secrets-operator:
     enabled: false
+
+  kube-prometheus-stack:
+    enabled: true
+    templatedValues:
+      prometheus:
+        prometheusSpec:
+          externalLabels:
+            cluster: "{{ .Values.clusterName }}"
+        # Exposed so the HUB's Grafana can query it. Plain http is deliberate:
+        # this cluster mints its own lab CA, which the hub does not trust, and
+        # Traefik here does not force HTTPS.
+        ingress:
+          enabled: true
+          ingressClassName: traefik
+          hosts:
+            - "prometheus.{{ .Values.global.dnsName }}"
+          tls:
+            - secretName: prometheus-tls
+              hosts:
+                - "prometheus.{{ .Values.global.dnsName }}"
+      # No second Grafana - the hub's is the single pane of glass.
+      grafana:
+        enabled: false

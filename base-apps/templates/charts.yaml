@@ -4,7 +4,10 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: {{ $appName }}
+  {{- /* appNameSuffix is "" on the hub, so its Application names are
+       unchanged. Spokes set it (e.g. "-dev") so their Applications do
+       not collide with the hub's in the shared argocd namespace. */}}
+  name: {{ $appName }}{{ $.Values.appNameSuffix | default "" }}
   namespace: {{ $.Values.argocd_namespace }}
   {{/* Sync wave. hasKey rather than a truthiness test, so an explicit
        `wave: 0` is still emitted instead of being silently dropped. */}}

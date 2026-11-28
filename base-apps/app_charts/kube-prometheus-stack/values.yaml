@@ -34,6 +34,33 @@ grafana:
       cpu: 500m
       memory: 512Mi
 
+  # -- Extra datasources: the spoke clusters' Prometheus instances.
+  #
+  # This Grafana is the single pane of glass for every cluster. Each cluster keeps
+  # its OWN Prometheus (so a network blip loses no data); this just reads them.
+  # Series are told apart by the `cluster` external label, set per cluster from
+  # `clusterName` in base-apps/values-<cluster>.yaml - the stock dashboards filter
+  # on it, which is why every cluster needs a distinct value.
+  #
+  # Plain http is deliberate, not an oversight:
+  #   * each cluster's cert-manager mints its own lab CA, so the hub would not
+  #     trust a spoke's certificate without either sharing the CA or
+  #     tlsSkipVerify;
+  #   * Traefik here does not force HTTPS (verified: http://.../api/health -> 200);
+  #   * the traffic is LAN-internal, same posture as the Prometheus ingress.
+  # Revisit if a spoke ever leaves the LAN.
+  #
+  # NOTE this Grafana runs in a POD, so it resolves the spoke host through
+  # CoreDNS, not the node's /etc/hosts. See myLab/04-ArgoCD/manual/coredns-custom.yaml.
+  additionalDataSources:
+    - name: Prometheus-dev
+      type: prometheus
+      access: proxy
+      url: http://prometheus.dev.lab
+      isDefault: false
+      jsonData:
+        timeInterval: 30s
+
 # ---------------------------------------------------------------------------
 # k3s compatibility
 # ---------------------------------------------------------------------------

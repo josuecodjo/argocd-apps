@@ -68,6 +68,22 @@ argocd_namespace: argocd
 dest_project: tools
 dest_namespace: tools
 
+# --- per-cluster identity -----------------------------------------------------
+# These two are what make one catalog serve several clusters from a single hub.
+#
+# appNameSuffix is appended to every generated Application name. It MUST stay ""
+# for the hub cluster: changing it renames the running Applications, which makes
+# Argo CD delete and recreate every component. Spokes set it (e.g. "-dev") so
+# their Applications do not collide with the hub's - both render into the hub's
+# single argocd namespace, so without a suffix two root apps would fight over an
+# Application called `kyverno`, `vault`, `kargo`...
+appNameSuffix: ""
+
+# Identifies this cluster in metrics. Becomes Prometheus' `cluster` external
+# label, which the stock kube-prometheus-stack dashboards filter on (they carry
+# 61 `cluster=` selectors), so every cluster needs a distinct value.
+clusterName: prod
+
 # Ingress suffix for every component that exposes a UI. Overridden at bootstrap
 # time by Ansible, which passes its own `global_dns_name` as a Helm parameter, so
 # this value and the Argo CD host always come from the same variable.
@@ -216,6 +232,10 @@ charts:
       - repoURL: https://prometheus-community.github.io/helm-charts
         targetRevision: 77.12.0
     templatedValues:
+      prometheus:
+        prometheusSpec:
+          externalLabels:
+            cluster: "{{ .Values.clusterName }}"
       grafana:
         ingress:
           hosts:

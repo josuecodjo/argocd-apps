@@ -1,22 +1,27 @@
 ---
 # =============================================================================
-# prod overlay - OVERRIDES ONLY
+# prod = the HUB cluster overlay
 # =============================================================================
-# Layered on top of values.yaml; see that file for the full catalog and for
-# the list-replacement caveat when pinning a per-environment chart version.
+# Loaded by the base-apps ApplicationSet as `values-{{ .name }}.yaml`, where the
+# name comes from this cluster's registration Secret in Argo CD.
 #
-#   helm template base-apps -f base-apps/values.yaml -f base-apps/values-prod.yaml
+# This file carries IDENTITY ONLY, on purpose. The hub has always run on
+# values.yaml alone, so adding component toggles here would silently enable
+# things on a live cluster. Change what the hub runs in values.yaml, not here.
 #
-# Keep this file to actual differences. Anything absent here is inherited.
+# (It previously held env-style toggles - external-secrets, kyverno,
+# policy-reporter, falco - which were never actually applied to any cluster.
+# They were dropped rather than switched on behind your back. Re-enable them in
+# values.yaml if you want them.)
 # =============================================================================
 
-charts:
-  # Security & policy stack is on in every environment today.
-  external-secrets:
-    enabled: true
-  kyverno:
-    enabled: true
-  policy-reporter:
-    enabled: true
-  falco:
-    enabled: true
+# MUST stay empty: a suffix here renames every running Application on the hub,
+# which makes Argo CD delete and recreate every component.
+appNameSuffix: ""
+
+clusterName: prod
+
+global:
+  # Must match `global_dns_name` in myLab/00-kubeSetup/vars/k8s.yml, which drives
+  # the Argo CD ingress host. Nothing enforces the match - see the README.
+  dnsName: prod.lab
